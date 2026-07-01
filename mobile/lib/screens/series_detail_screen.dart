@@ -186,35 +186,31 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
     return Scaffold(
       body: DecoratedBox(
         decoration: T.screenBackground,
-        child: CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(child: _hero(l)),
-            SliverToBoxAdapter(child: _meta(l)),
-            if (_loading)
-              const SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.symmetric(vertical: 40),
-                  child: Center(child: CircularProgressIndicator(color: T.accent)),
-                ),
-              )
-            else if (_error != null)
-              SliverToBoxAdapter(child: _errorRow(l))
-            else ...[
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 8, 18, 8),
-                  child: SectionHeader(
-                    title: l.bi('ตอนทั้งหมด', 'Episodes'),
-                    trailing: '${_episodes.length} ${l.pick('ตอน', 'eps')}',
-                  ),
-                ),
-              ),
-              SliverList.builder(
-                itemCount: _episodes.length,
-                itemBuilder: (_, i) => _episodeRow(l, _episodes[i], i),
-              ),
-              const SliverToBoxAdapter(child: SizedBox(height: 24)),
-            ],
+        child: Column(
+          children: [
+            // Fixed preview — stays put while the episode list scrolls.
+            _hero(l),
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator(color: T.accent))
+                  : _error != null
+                      ? _errorRow(l)
+                      : ListView(
+                          padding: const EdgeInsets.only(bottom: 24),
+                          children: [
+                            _meta(l),
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(18, 8, 18, 8),
+                              child: SectionHeader(
+                                title: l.bi('ตอนทั้งหมด', 'Episodes'),
+                                trailing: '${_episodes.length} ${l.pick('ตอน', 'eps')}',
+                              ),
+                            ),
+                            for (var i = 0; i < _episodes.length; i++)
+                              _episodeRow(l, _episodes[i], i),
+                          ],
+                        ),
+            ),
           ],
         ),
       ),
@@ -235,8 +231,8 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
   Widget _hero(L10n l) {
     final preview = _preview;
     final showPreview = _previewReady && preview != null && preview.value.isInitialized;
-    // Full-bleed cinematic header that fills the phone width; tall.
-    final height = (MediaQuery.of(context).size.height * 0.64).clamp(380.0, 660.0);
+    // Fixed cinematic header — fills the phone width, leaves room for the list.
+    final height = (MediaQuery.of(context).size.height * 0.5).clamp(320.0, 560.0);
 
     return SizedBox(
       height: height,
@@ -303,6 +299,25 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                   ),
                 ),
               ),
+            ),
+          ),
+
+          // The cover poster, kept visible on the right.
+          Positioned(
+            right: 14,
+            bottom: 34,
+            child: Container(
+              width: 104,
+              height: 156,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: T.hairlineStrong),
+                boxShadow: const [
+                  BoxShadow(color: Color(0xB3000000), blurRadius: 20, offset: Offset(0, 8), spreadRadius: -6),
+                ],
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: PosterImage(url: s.displayImageUrl, seed: s.id, radius: 12),
             ),
           ),
 
