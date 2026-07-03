@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../services/ad_service.dart';
 import '../state/app_state.dart';
+import '../state/member_state.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 
@@ -19,7 +20,9 @@ class AdBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isPro = context.watch<AppState>().isPro;
+    // Ad-free for locally-purchased Pro OR a server plan (incl. referral-granted
+    // free Pro), so redeeming the invite promo actually removes ads.
+    final isPro = context.watch<AppState>().isPro || context.watch<MemberState>().isPro;
     if (isPro) return const SizedBox.shrink();
 
     final ads = context.watch<AdService>();

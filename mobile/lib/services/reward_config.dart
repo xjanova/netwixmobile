@@ -24,6 +24,22 @@ class RewardConfig {
   static const int rewardWatchDailyMax = 5; // จำกัดต่อวัน
   static const int referralSignupBonus = 15; // เพื่อนสมัครผ่านโค้ดเรา
   static const int watchFiveDaily = 5; // ดูครบ 5 ตอนใน 1 วัน
+
+  // ---- โปรชวนเพื่อน → Pro ฟรี (server-authoritative; client แค่แสดงผล) ----
+  // ชวนเพื่อนที่ "ครบเงื่อนไข" (สมัคร + ยืนยัน + ดูจบ ≥1 ตอน) ให้ครบ
+  // [referralTarget] คน → ปลดล็อก Pro ฟรี [referralRewardMonths] เดือน (ครั้งเดียว).
+  // การนับ + การให้สิทธิ์ทำที่เซิร์ฟเวอร์เท่านั้น แอปไม่ตัดสินใจเอง (กันโกง).
+  static const int referralTarget = 3;
+  static const int referralRewardMonths = 2;
+
+  // ---- ไลก์ / คอมเมนต์ / แชร์ → เหรียญ (best-effort local; server reconciles) ----
+  // มี cap ต่อวันกันสแปมกดวน ๆ; เหรียญจริงเซิร์ฟเวอร์เป็นผู้ตัดสิน.
+  static const int likeCoins = 1;
+  static const int likeDailyMax = 5;
+  static const int commentCoins = 2;
+  static const int commentDailyMax = 3;
+  static const int shareCoins = 1;
+  static const int shareDailyMax = 3;
 }
 
 /// A coin-earning activity shown on the "หาเหรียญ" screen.

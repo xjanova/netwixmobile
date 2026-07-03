@@ -76,7 +76,7 @@ class _CatalogGridScreenState extends State<CatalogGridScreen> {
                       decoration: InputDecoration(
                         isCollapsed: true,
                         border: InputBorder.none,
-                        hintText: l.bi('ค้นหาซีรีส์ หนัง', 'Search series, movies…'),
+                        hintText: l.bi('ค้นหาซีรีส์ หนัง อนิเมะ', 'Search series, movies, anime…'),
                         hintStyle: AppTheme.body(13.5, color: T.textMuted),
                       ),
                     ),
@@ -109,7 +109,7 @@ class _CatalogGridScreenState extends State<CatalogGridScreen> {
           ),
         ),
         Expanded(
-          child: catalog.loading && catalog.isEmpty
+          child: (catalog.loading || catalog.filterLoading) && list.isEmpty
               ? const Center(child: CircularProgressIndicator(color: T.accent))
               : catalog.error != null && catalog.isEmpty
                   ? _error(l, catalog)

@@ -22,6 +22,8 @@ class MenuScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
     final l = app.l;
+    final member = context.watch<MemberState>();
+    final effectivePro = app.isPro || member.isPro;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
@@ -31,6 +33,10 @@ class MenuScreen extends StatelessWidget {
         _accountCard(context, app),
         const SizedBox(height: 12),
         _coinsRow(context, l),
+        if (member.isLoggedIn && !effectivePro) ...[
+          const SizedBox(height: 12),
+          _referralPromoRow(context, l, member),
+        ],
         const SizedBox(height: 16),
         _languageRow(context, app),
         const SizedBox(height: 8),
@@ -40,8 +46,49 @@ class MenuScreen extends StatelessWidget {
             onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const WhatsNewScreen()))),
         _row(context, Icons.info_rounded, 'เกี่ยวกับ', 'About', onTap: () => _about(context, l)),
         const SizedBox(height: 20),
-        if (!app.isPro) _upgradeBanner(context, l) else _proActiveBanner(l),
+        if (!effectivePro) _upgradeBanner(context, l) else _proActiveBanner(l, member),
       ],
+    );
+  }
+
+  Widget _referralPromoRow(BuildContext context, L10n l, MemberState member) {
+    final done = member.referralQualified.clamp(0, member.referralTarget);
+    return GestureDetector(
+      onTap: () =>
+          Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EarnCoinsScreen())),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0x33FF2D55), Color(0x22B026FF)],
+          ),
+          borderRadius: BorderRadius.circular(T.rCard),
+          border: Border.all(color: T.accentGlow),
+        ),
+        child: Row(
+          children: [
+            const HexIcon(icon: Icons.workspace_premium_rounded, size: 34),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    l.pick('ชวนครบ ${member.referralTarget} คน รับ Pro ฟรี ${member.referralRewardMonths} เดือน',
+                        'Invite ${member.referralTarget} — ${member.referralRewardMonths} months Pro free'),
+                    style: AppTheme.body(13.5, weight: FontWeight.w700, color: T.textPrimary),
+                  ),
+                  Text(l.pick('ชวนแล้ว $done/${member.referralTarget} คน', '$done/${member.referralTarget} invited'),
+                      style: AppTheme.body(11.5, color: T.accent)),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: T.textFaint, size: 20),
+          ],
+        ),
+      ),
     );
   }
 
@@ -89,6 +136,7 @@ class MenuScreen extends StatelessWidget {
     }
 
     final m = member.member!;
+    final pro = app.isPro || member.isPro;
     return GlassCard(
       child: Row(
         children: [
@@ -99,12 +147,12 @@ class MenuScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(m.name, style: AppTheme.body(15, weight: FontWeight.w700, color: T.textPrimary)),
-                Text('${m.provider.toUpperCase()} · ${app.isPro ? l.pick('แผน Pro', 'Pro') : l.pick('แผนฟรี', 'Free')}',
+                Text('${m.provider.toUpperCase()} · ${pro ? l.pick('แผน Pro', 'Pro') : l.pick('แผนฟรี', 'Free')}',
                     style: AppTheme.body(12, color: T.textMuted)),
               ],
             ),
           ),
-          if (app.isPro) const Pill(text: 'PRO', filled: true),
+          if (pro) const Pill(text: 'PRO', filled: true),
           IconButton(
             onPressed: () => member.logout(),
             icon: const Icon(Icons.logout_rounded, size: 18, color: T.textFaint),
@@ -248,7 +296,10 @@ class MenuScreen extends StatelessWidget {
     );
   }
 
-  Widget _proActiveBanner(L10n l) {
+  Widget _proActiveBanner(L10n l, MemberState member) {
+    final until = member.proUntil;
+    String two(int n) => n.toString().padLeft(2, '0');
+    final untilText = until == null ? null : '${two(until.day)}/${two(until.month)}/${until.year}';
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -261,8 +312,16 @@ class MenuScreen extends StatelessWidget {
           const HexIcon(icon: Icons.verified_rounded, size: 38),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(l.bi('กำลังรับชมแบบไม่มีโฆษณา', 'Watching ad-free'),
-                style: AppTheme.body(14, weight: FontWeight.w600, color: T.textPrimary)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(l.bi('กำลังรับชมแบบไม่มีโฆษณา', 'Watching ad-free'),
+                    style: AppTheme.body(14, weight: FontWeight.w600, color: T.textPrimary)),
+                if (untilText != null)
+                  Text(l.pick('Pro ถึง $untilText', 'Pro until $untilText'),
+                      style: AppTheme.body(11.5, color: T.textMuted)),
+              ],
+            ),
           ),
         ],
       ),

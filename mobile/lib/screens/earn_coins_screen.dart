@@ -11,6 +11,7 @@ import '../theme/app_theme.dart';
 import '../theme/hex.dart';
 import '../theme/tokens.dart';
 import '../widgets/common.dart';
+import '../widgets/referral_promo_card.dart';
 import 'reward_watch_screen.dart';
 
 /// หาเหรียญ · Earn coins — the activities I defined (backend can add more).
@@ -34,6 +35,10 @@ class EarnCoinsScreen extends StatelessWidget {
           children: [
             _balance(l, member),
             const SizedBox(height: 18),
+
+            // ⭐ Headline promo: invite 3 qualified friends → 2 months Pro free.
+            ReferralPromoCard(onShare: () => _shareReferral(context, member, l)),
+
             if (!member.isLoggedIn) _loginCard(context, l),
 
             _activity(
@@ -68,7 +73,7 @@ class EarnCoinsScreen extends StatelessWidget {
               sub: l.pick('เพื่อนสมัครผ่านโค้ดเรา', 'Friend signs up with your code'),
               coins: RewardConfig.referralSignupBonus,
               actionLabel: l.pick('แชร์', 'Share'),
-              onTap: () => _shareReferral(context, member.referralCode, l),
+              onTap: () => _shareReferral(context, member, l),
             ),
             _activity(
               icon: Icons.playlist_play_rounded,
@@ -204,12 +209,20 @@ class EarnCoinsScreen extends StatelessWidget {
     );
   }
 
-  void _shareReferral(BuildContext context, String code, L10n l) {
+  Future<void> _shareReferral(BuildContext context, MemberState member, L10n l) async {
+    final code = member.referralCode;
+    final link = member.shareLink;
+    final months = member.referralRewardMonths;
     final text = l.pick(
-      'มาดูซีรีส์ฟรีกับ NetWix! ใช้โค้ด $code รับเหรียญฟรี\nhttps://netwix.online/r/$code',
-      'Watch series free on NetWix! Use code $code for free coins\nhttps://netwix.online/r/$code',
+      'มาดูซีรีส์ฟรีกับ NetWix! 🎬\n'
+          'สมัครด้วยโค้ด $code แล้วดูให้จบ 1 ตอน — ชวนครบ 3 คน ฉันได้ Pro ฟรี $months เดือน 🎁\n$link',
+      'Watch series free on NetWix! 🎬\n'
+          'Sign up with code $code and finish 1 episode — 3 friends unlock $months months of Pro for me 🎁\n$link',
     );
-    SharePlus.instance.share(ShareParams(text: text));
+    await SharePlus.instance.share(ShareParams(text: text));
+    if (!context.mounted) return;
+    final got = await member.awardShare();
+    if (context.mounted && got > 0) _toast(context, '+$got ${l.pick('เหรียญ', 'coins')}');
   }
 
   void _toast(BuildContext context, String msg) =>

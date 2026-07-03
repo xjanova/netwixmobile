@@ -84,7 +84,7 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
       _api = context.read<NetwixApi>();
       _db = context.read<CatalogDb>();
       _member = context.read<MemberState>();
-      _isPro = context.read<AppState>().isPro;
+      _isPro = context.read<AppState>().isPro || _member!.isPro;
       _ensure(_current);
       _ensure(_current + 1);
       _ensure(_current - 1);
@@ -334,8 +334,8 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
   @override
   Widget build(BuildContext context) {
     final l = context.watch<AppState>().l;
-    _isPro = context.watch<AppState>().isPro;
-    context.watch<MemberState>(); // rebuild lock overlays after unlock/login
+    final member = context.watch<MemberState>(); // rebuild lock overlays after unlock/login
+    _isPro = context.watch<AppState>().isPro || member.isPro;
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(

@@ -76,6 +76,16 @@ class _CommentSheetState extends State<_CommentSheet> {
       _sending = false;
     });
     await netwix.postComment(widget.seriesId, text); // graceful until live
+
+    // Reward the comment (signed-in only, daily-capped server-side + locally).
+    if (!mounted) return;
+    final got = await context.read<MemberState>().awardComment();
+    if (mounted && got > 0) {
+      final l = context.read<AppState>().l;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('+$got ${l.pick('เหรียญ', 'coins')} 🪙')),
+      );
+    }
   }
 
   @override

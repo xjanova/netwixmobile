@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../l10n/l10n.dart';
 import '../main.dart' show routeObserver;
+import '../models/content.dart';
 import '../services/catalog_db.dart';
 import '../services/netwix_api.dart';
 import '../state/app_state.dart';
@@ -95,34 +96,23 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
           else if (catalog.error != null && catalog.isEmpty)
             _errorBox(l, catalog)
           else ...[
-            SectionHeader(
-              title: l.bi('แนวตั้ง', 'Vertical'),
-              badge: const Pill(text: 'ดูฟรี', filled: true),
-              trailing: l.pick('ทั้งหมด ›', 'See all ›'),
-              onTrailingTap: widget.onOpenExplore,
-            ),
-            SizedBox(
-              height: 208,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: catalog.visible.length.clamp(0, 15),
-                separatorBuilder: (_, _) => const SizedBox(width: 12),
-                itemBuilder: (_, i) => PortraitPosterCard(content: catalog.visible[i]),
+            // When a category chip is active (e.g. อนิเมะ), lead with that set.
+            if (catalog.filter != CatalogFilter.all)
+              _rail(
+                l,
+                l.isTh ? catalog.filter.th : catalog.filter.en,
+                catalog.visible,
+                badge: catalog.filter == CatalogFilter.vertical
+                    ? const Pill(text: 'ดูฟรี', filled: true)
+                    : null,
+                loading: catalog.filterLoading,
               ),
-            ),
-            const SizedBox(height: 24),
-            SectionHeader(
-              title: l.bi('ยอดนิยม', 'Popular'),
-              trailing: l.pick('ทั้งหมด ›', 'See all ›'),
-              onTrailingTap: widget.onOpenExplore,
-            ),
-            if (catalog.featured.isNotEmpty) FeaturedCard(content: catalog.featured.first),
-            const SizedBox(height: 16),
-            for (final s in catalog.featured.skip(1).take(3))
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: FeaturedCard(content: s),
-              ),
+            // The web's curated home rails (trending + genres, incl. anime).
+            for (final r in catalog.rails)
+              if (r.items.isNotEmpty) _rail(l, r.title, r.items),
+            // Fallback when the backend sent no rails (offline / older API).
+            if (catalog.rails.isEmpty && catalog.filter == CatalogFilter.all)
+              _rail(l, l.bi('ยอดนิยม', 'Popular'), catalog.featured),
           ],
         ],
       ),
@@ -161,7 +151,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
         child: Row(children: [
           const Icon(Icons.search_rounded, size: 18, color: T.textMuted),
           const SizedBox(width: 10),
-          Text(l.bi('ค้นหาซีรีส์ หนัง', 'Search series, movies…'),
+          Text(l.bi('ค้นหาซีรีส์ หนัง อนิเมะ', 'Search series, movies, anime…'),
               style: AppTheme.body(13.5, color: T.textMuted)),
         ]),
       ),
@@ -202,6 +192,39 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
             style: AppTheme.body(12.5,
                 weight: FontWeight.w600, color: active ? T.onAccent : T.textSecondary)),
       ),
+    );
+  }
+
+  /// A horizontal poster rail with a header + "See all ›" → Explore.
+  Widget _rail(L10n l, String title, List<Content> items, {Widget? badge, bool loading = false}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionHeader(
+          title: title,
+          badge: badge,
+          trailing: l.pick('ทั้งหมด ›', 'See all ›'),
+          onTrailingTap: widget.onOpenExplore,
+        ),
+        SizedBox(
+          height: 208,
+          child: loading && items.isEmpty
+              ? const Center(child: CircularProgressIndicator(color: T.accent))
+              : items.isEmpty
+                  ? Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(l.pick('ยังไม่มีรายการ', 'Nothing here yet'),
+                          style: AppTheme.body(12.5, color: T.textMuted)),
+                    )
+                  : ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: items.length.clamp(0, 18),
+                      separatorBuilder: (_, _) => const SizedBox(width: 12),
+                      itemBuilder: (_, i) => PortraitPosterCard(content: items[i]),
+                    ),
+        ),
+        const SizedBox(height: 24),
+      ],
     );
   }
 

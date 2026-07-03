@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
 
 import '../l10n/l10n.dart';
@@ -55,12 +56,38 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
   }
 
   Future<void> _toggleLike() async {
+    final becameLiked = !_liked;
     setState(() {
-      _liked = !_liked;
-      _likes += _liked ? 1 : -1;
+      _liked = becameLiked;
+      _likes += becameLiked ? 1 : -1;
       if (_likes < 0) _likes = 0;
     });
     await context.read<NetwixClient>().toggleLike(c.id); // graceful until live
+    // Coins only when turning a like ON (server + daily cap prevent farming).
+    if (becameLiked && mounted) {
+      final got = await context.read<MemberState>().awardLike();
+      if (got > 0 && mounted) _coinToast(got);
+    }
+  }
+
+  Future<void> _share() async {
+    final l = context.read<AppState>().l;
+    final text = l.pick(
+      'ดู "${c.title}" ฟรีบน NetWix 🎬\nhttps://netwix.online/t/${c.slug}',
+      'Watch "${c.title}" free on NetWix 🎬\nhttps://netwix.online/t/${c.slug}',
+    );
+    await SharePlus.instance.share(ShareParams(text: text));
+    if (!mounted) return;
+    final got = await context.read<MemberState>().awardShare();
+    if (got > 0 && mounted) _coinToast(got);
+  }
+
+  void _coinToast(int coins) {
+    if (!mounted) return;
+    final l = context.read<AppState>().l;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('+$coins ${l.pick('เหรียญ', 'coins')} 🪙')),
+    );
   }
 
   @override
@@ -158,7 +185,9 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
     }
 
     final member = context.read<MemberState>();
-    final isPro = context.read<AppState>().isPro;
+    // Effective Pro = locally-purchased flag OR server plan (incl. referral-
+    // granted free Pro). Either removes the coin gate.
+    final isPro = context.read<AppState>().isPro || member.isPro;
 
     // Gate: free for first N / Pro / already unlocked, else prompt to unlock.
     if (!member.isEpisodeUnlocked(c.id, ep.id, index, isPro: isPro)) {
@@ -379,12 +408,14 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
       const SizedBox(width: 10),
       btn(Icons.mode_comment_outlined, l.pick('คอมเมนต์', 'Comment'),
           () => showCommentSheet(context, c.id)),
+      const SizedBox(width: 10),
+      btn(Icons.ios_share_rounded, l.pick('แชร์', 'Share'), _share),
     ]);
   }
 
   Widget _episodeRow(L10n l, Episode ep, int index) {
     final member = context.watch<MemberState>();
-    final isPro = context.watch<AppState>().isPro;
+    final isPro = context.watch<AppState>().isPro || member.isPro;
     final unlocked = member.isEpisodeUnlocked(c.id, ep.id, index, isPro: isPro);
     final free = !RewardConfig.gatingEnabled || index < RewardConfig.freeEpisodes;
 

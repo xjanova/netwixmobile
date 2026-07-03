@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/member.dart';
+import '../models/referral.dart';
 
 /// Client for **netwix.online** — the membership / coins / social backend.
 /// It is wired and ready but degrades to a **silent no-op** until the backend
@@ -21,7 +22,10 @@ import '../models/member.dart';
 ///   POST /api/series/{id}/like                          → { likes, liked }
 ///   GET  /api/series/{id}/comments                      → { comments[] }
 ///   POST /api/series/{id}/comments  { text }            → { comment }
-///   GET  /api/referral      (Bearer)                    → { code, count, coins, share_url }
+///   GET  /api/referral      (Bearer)  → { code, qualified, pending, target,
+///                                         reward_months, claimed, pro_until, share_url }
+///        (qualified = friends who signed up + verified + finished ≥1 episode;
+///         at qualified>=target the server grants Pro until pro_until, once.)
 ///   GET  /api/rewards/tasks (Bearer)                    → { tasks[] }
 ///   POST /api/rewards/heartbeat { task_id, session, seconds }   (anti-cheat)
 ///   POST /api/rewards/claim { task_id }                 → { coins }
@@ -106,6 +110,23 @@ class NetwixClient {
       return r.data?['success'] == true;
     } catch (_) {
       return false;
+    }
+  }
+
+  // ------------------------------------------------------------ referral
+
+  /// Referral programme + launch-promo status (Bearer). Returns null when the
+  /// backend is unavailable — the caller then shows the local code with 0/target
+  /// progress until the server answers. The Pro grant itself is decided
+  /// server-side (see [ReferralStatus]); the app never unlocks Pro on its own.
+  Future<ReferralStatus?> fetchReferral() async {
+    try {
+      final r = await _dio.get<Map<String, dynamic>>('/api/referral', options: _auth);
+      if (r.data?['success'] != true) return null;
+      final d = r.data!['data'];
+      return d is Map<String, dynamic> ? ReferralStatus.fromJson(d) : null;
+    } catch (_) {
+      return null;
     }
   }
 
