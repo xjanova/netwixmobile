@@ -23,8 +23,9 @@ import '../widgets/ad_banner.dart';
 ///
 /// Full-screen, immersive, **TikTok-style vertical feed**: one episode per page,
 /// swipe up = next episode, swipe down = previous. Each episode's stream is
-/// resolved from NetWix (`/episodes/{id}/source`) — a mirrored MP4 or HLS proxy
-/// that plays from any IP. Adjacent episodes are pre-resolved + pre-initialised
+/// resolved from NetWix (`/episodes/{id}/source`) — a fresh signed CDN mp4 or an
+/// HLS proxy, resolved server-side, that plays from any IP. Adjacent episodes
+/// are pre-resolved + pre-initialised
 /// so swiping plays instantly. Only the current page plays; neighbours stay
 /// paused & ready. Keeps resume (seek + checkpoint) and the free-user ad overlay.
 class PlaybackScreen extends StatefulWidget {

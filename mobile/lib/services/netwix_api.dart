@@ -6,10 +6,11 @@ import '../models/episode.dart';
 
 /// Client for the NetWix mobile API (`https://netwix.online/api/app/*`).
 ///
-/// This is the app's ONLY content backend — NetWix mirrors rongyok episodes to
-/// its own storage and streams them as plain `/storage/*.mp4` (playable from any
-/// IP), which fixes the rongyok residential-IP lock the app hit when scraping
-/// rongyok directly. Envelope: `{ "success": bool, "data": {...} }`.
+/// This is the app's ONLY content backend. NetWix resolves each episode's stream
+/// server-side, on demand: a FRESH signed CDN mp4 for rongyok (the links expire
+/// ~24h but are NOT IP-locked — the old app just kept fetching stale ones), or an
+/// HMAC-signed HLS proxy for wow-drama. Either way the client plays the returned
+/// url directly (no headers), from any IP. Envelope: `{ "success": bool, "data": {...} }`.
 class NetwixApi {
   NetwixApi({Dio? dio, String? token})
       : _token = token,

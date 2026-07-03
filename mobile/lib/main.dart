@@ -24,12 +24,12 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Content + playback both come from NetWix now (netwix.online/api/app/*).
-  // NetWix mirrors each episode to its own storage and streams plain
-  // /storage/*.mp4, which plays from any IP — fixing the rongyok
-  // residential-IP lock that broke playback when the app scraped rongyok.
-  // Playback uses the platform-default video_player backend (ExoPlayer on
-  // Android); the fvp/ffmpeg backend tried in 1.0.9 broke ALL playback and
-  // was removed.
+  // NetWix resolves each episode's stream server-side on demand (a fresh signed
+  // CDN mp4 for rongyok, an HLS proxy for wow-drama), so it plays from any IP —
+  // fixing the stale/expired links that broke playback when the app scraped
+  // rongyok directly. Playback uses the platform-default video_player backend
+  // (ExoPlayer on Android); the fvp/ffmpeg backend tried in 1.0.9 broke ALL
+  // playback and was removed.
 
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,

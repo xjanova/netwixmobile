@@ -24,10 +24,12 @@ class Episode {
   final int? durationMinutes;
   final String? thumbnailUrl;
 
-  /// Mirrored to NetWix storage (or otherwise playable) — ready to stream.
+  /// Legacy hint from the API; NOT used for UI decisions — the player is the
+  /// source of truth via `resolveSource().ready`. (Left here so the field still
+  /// deserializes; wow-drama/rongyok both report false yet play fine.)
   final bool isMirrored;
 
-  /// Source deleted upstream / gave up mirroring — never playable.
+  /// Source removed upstream — never playable. Shown as "unavailable".
   final bool isUnavailable;
   final int sort;
 
