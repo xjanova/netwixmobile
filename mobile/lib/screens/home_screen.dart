@@ -8,6 +8,7 @@ import '../services/catalog_db.dart';
 import '../services/netwix_api.dart';
 import '../state/app_state.dart';
 import '../state/catalog_state.dart';
+import '../state/member_state.dart';
 import '../theme/app_theme.dart';
 import '../theme/hex.dart';
 import '../theme/tokens.dart';
@@ -57,8 +58,24 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
   void didPopNext() => _loadContinue();
 
   Future<void> _loadContinue() async {
+    // Signed in → the server's watch-progress (same as the web, syncs across
+    // devices). Guest → the on-device resume list.
+    final loggedIn = context.read<MemberState>().isLoggedIn;
+    final api = context.read<NetwixApi>();
+    final db = context.read<CatalogDb>();
+    if (loggedIn) {
+      final prog = await api.fetchProgress();
+      if (prog.isNotEmpty) {
+        final items = prog.map((p) {
+          final dur = p.percent > 0 ? (p.positionSeconds * 100 / p.percent).round() : 0;
+          return ResumeItem(p.content, p.episodeId ?? 0, 0, p.positionSeconds, dur);
+        }).toList();
+        if (mounted) setState(() => _continue = items);
+        return;
+      }
+    }
     try {
-      final items = await context.read<CatalogDb>().continueWatching(limit: 12);
+      final items = await db.continueWatching(limit: 12);
       if (mounted) setState(() => _continue = items);
     } catch (_) {/* ignore */}
   }
