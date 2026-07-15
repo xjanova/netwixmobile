@@ -6,6 +6,7 @@ import '../models/content.dart';
 import '../models/episode.dart';
 import '../models/member.dart';
 import '../models/mission.dart';
+import '../models/profile.dart';
 import '../models/wallet.dart';
 
 /// Client for the NetWix mobile API (`https://netwix.online/api/app/*`).
@@ -541,6 +542,72 @@ class NetwixApi {
     } catch (e) {
       if (kDebugMode) debugPrint('netwix progress: $e');
       return const [];
+    }
+  }
+
+  // -------------------------------------------------------------- profiles
+  // Kids mode is enforced server-side: `selectProfile` binds the choice to this
+  // device's token, and the server filters adult titles from there. The app
+  // never decides what a kids profile may see.
+
+  Future<ProfileList?> fetchProfiles() async {
+    try {
+      final d = _data(await _dio.get('/profiles', options: _opts));
+      return d == null ? null : ProfileList.fromJson(d);
+    } catch (e) {
+      if (kDebugMode) debugPrint('netwix profiles: $e');
+      return null;
+    }
+  }
+
+  /// Create a profile. Returns null on failure (e.g. the 5-profile ceiling).
+  Future<Profile?> createProfile({
+    required String name,
+    String? avatarColor,
+    bool isKids = false,
+  }) async {
+    return _profileWrite(() => _dio.post('/profiles',
+        data: {'name': name, 'avatar_color': ?avatarColor, 'is_kids': isKids},
+        options: Options(headers: _opts.headers, validateStatus: (s) => s != null && s < 500)));
+  }
+
+  /// Make [profileId] this device's active profile (server binds it to the token).
+  Future<Profile?> selectProfile(int profileId) async {
+    return _profileWrite(() => _dio.post('/profiles/$profileId/select',
+        options: Options(headers: _opts.headers, validateStatus: (s) => s != null && s < 500)));
+  }
+
+  Future<Profile?> updateProfile(
+    int profileId, {
+    required String name,
+    String? avatarColor,
+    bool isKids = false,
+  }) async {
+    return _profileWrite(() => _dio.post('/profiles/$profileId',
+        data: {'name': name, 'avatar_color': ?avatarColor, 'is_kids': isKids},
+        options: Options(headers: _opts.headers, validateStatus: (s) => s != null && s < 500)));
+  }
+
+  /// Delete a profile. False when the server refuses (e.g. it's the last one).
+  Future<bool> deleteProfile(int profileId) async {
+    try {
+      final r = await _dio.delete('/profiles/$profileId',
+          options: Options(headers: _opts.headers, validateStatus: (s) => s != null && s < 500));
+      return r.data is Map && (r.data as Map)['success'] == true;
+    } catch (e) {
+      if (kDebugMode) debugPrint('netwix deleteProfile($profileId): $e');
+      return false;
+    }
+  }
+
+  Future<Profile?> _profileWrite(Future<Response> Function() send) async {
+    try {
+      final d = _data(await send());
+      final p = d?['profile'];
+      return p is Map ? Profile.fromJson(p.cast<String, dynamic>()) : null;
+    } catch (e) {
+      if (kDebugMode) debugPrint('netwix profileWrite: $e');
+      return null;
     }
   }
 
