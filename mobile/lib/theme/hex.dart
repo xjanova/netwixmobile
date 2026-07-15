@@ -63,25 +63,50 @@ class GemCrest extends StatelessWidget {
 }
 
 /// A hexagonal avatar (image or gradient placeholder).
+///
+/// Pass [tint] to shade it with a profile's `avatar_color` — the web renders
+/// members as a colour+initial tile, so the tint IS the identity.
 class HexAvatar extends StatelessWidget {
-  const HexAvatar({super.key, this.size = 40, this.child});
+  const HexAvatar({super.key, this.size = 40, this.child, this.tint});
   final double size;
   final Widget? child;
+  final Color? tint;
+
+  static const _defaultGradient = [Color(0xFF4A3A24), Color(0xFF241A12)];
+
+  /// Parse a `#rrggbb` / `rrggbb` colour from the server. Returns null on
+  /// anything unexpected so the caller falls back rather than throwing on a
+  /// malformed value.
+  static Color? parseColor(String? hex) {
+    if (hex == null) return null;
+    var h = hex.trim().replaceFirst('#', '');
+    if (h.length == 3) {
+      h = h.split('').map((c) => '$c$c').join();
+    }
+    if (h.length != 6) return null;
+    final v = int.tryParse(h, radix: 16);
+    return v == null ? null : Color(0xFF000000 | v);
+  }
 
   @override
-  Widget build(BuildContext context) => HexBox(
-        size: size,
-        child: DecoratedBox(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Color(0xFF4A3A24), Color(0xFF241A12)],
-            ),
+  Widget build(BuildContext context) {
+    final t = tint;
+    return HexBox(
+      size: size,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: t == null
+                ? _defaultGradient
+                : [t.withValues(alpha: 0.85), Color.lerp(t, Colors.black, 0.55)!],
           ),
-          child: child,
         ),
-      );
+        child: child,
+      ),
+    );
+  }
 }
 
 /// Small hex icon used in nav / list rows.

@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:characters/characters.dart';
+
 /// A signed-in member. Backed by netwix.online once live; until then a local
 /// guest/session record persisted on-device.
 class Member {
@@ -116,22 +118,34 @@ class Comment {
   const Comment({
     required this.id,
     required this.author,
-    this.avatar,
+    this.avatarColor,
     required this.text,
-    required this.createdAt,
+    this.createdAt,
   });
 
   final String id;
   final String author;
-  final String? avatar;
+
+  /// Profile tint as a `#rrggbb` string (`avatar_color` in the payload). The web
+  /// renders comments as a colour+initial tile rather than a photo, so this is
+  /// the whole avatar. Null → fall back to the accent colour.
+  final String? avatarColor;
+
   final String text;
-  final DateTime createdAt;
+
+  /// Null when the server didn't send a parseable timestamp — the UI then just
+  /// omits the "x นาทีที่แล้ว" line instead of inventing one (an unparsed date
+  /// used to fall back to epoch 0, which would read as "55 years ago").
+  final DateTime? createdAt;
+
+  /// First character of the author's name, matching the web's `initial`.
+  String get initial => author.trim().isEmpty ? '?' : author.trim().characters.first;
 
   factory Comment.fromJson(Map<String, dynamic> j) => Comment(
         id: '${j['id'] ?? ''}',
         author: (j['author'] ?? j['name'] ?? 'สมาชิก') as String,
-        avatar: j['avatar'] as String?,
+        avatarColor: (j['avatar_color'] ?? j['color']) as String?,
         text: (j['text'] ?? j['body'] ?? '') as String,
-        createdAt: DateTime.tryParse('${j['created_at'] ?? ''}') ?? DateTime.fromMillisecondsSinceEpoch(0),
+        createdAt: DateTime.tryParse('${j['created_at'] ?? ''}'),
       );
 }

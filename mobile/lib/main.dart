@@ -62,6 +62,9 @@ Future<void> main() async {
   ));
 
   final settings = await SettingsStore.load();
+  // Drop the old device-local "Pro" bool — it was self-granted and bypassed both
+  // ads and the episode paywall. Pro now comes from the server only.
+  await settings.clearLegacyProFlag();
   final api = NetwixApi();
   final db = await CatalogDb.open();
   final accountStore = await AccountStore.load();

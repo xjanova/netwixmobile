@@ -34,6 +34,9 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
+  # Grapheme-safe string handling — a Thai cluster or emoji must not be split by
+  # taking [0] when deriving a comment avatar's initial.
+  characters: ^1.4.0
   dio: ^5.10.0
   provider: ^6.1.5+1
   video_player: ^2.11.1

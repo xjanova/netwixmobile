@@ -164,8 +164,8 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
   Future<void> _share() async {
     final l = context.read<AppState>().l;
     final text = l.pick(
-      'ดู "${c.title}" ฟรีบน NetWix 🎬\nhttps://netwix.online/t/${c.slug}',
-      'Watch "${c.title}" free on NetWix 🎬\nhttps://netwix.online/t/${c.slug}',
+      'ดู "${c.title}" ฟรีบน NetWix 🎬\n${NetwixApi.titleUrl(c.slug)}',
+      'Watch "${c.title}" free on NetWix 🎬\n${NetwixApi.titleUrl(c.slug)}',
     );
     await SharePlus.instance.share(ShareParams(text: text));
     if (!mounted) return;
@@ -279,7 +279,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
     final member = context.read<MemberState>();
     // Effective Pro = locally-purchased flag OR server plan (incl. referral-
     // granted free Pro). Either removes the coin gate.
-    final isPro = context.read<AppState>().isPro || member.isPro;
+    final isPro = member.isPro;
 
     // Gate: free for first N / Pro / already unlocked, else prompt to unlock.
     if (!member.isEpisodeUnlocked(c.id, ep.id, index, isPro: isPro)) {
@@ -546,7 +546,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
 
   Widget _episodeRow(L10n l, Episode ep, int index) {
     final member = context.watch<MemberState>();
-    final isPro = context.watch<AppState>().isPro || member.isPro;
+    final isPro = context.watch<MemberState>().isPro;
     final unlocked = member.isEpisodeUnlocked(c.id, ep.id, index, isPro: isPro);
     final free = !RewardConfig.gatingEnabled || index < RewardConfig.freeEpisodes;
 

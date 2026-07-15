@@ -14,7 +14,10 @@ import '../services/format.dart';
 import '../services/netwix_api.dart';
 import '../state/app_state.dart';
 import '../state/member_state.dart';
+import '../widgets/end_card.dart';
+import '../widgets/login_sheet.dart';
 import '../widgets/unlock_sheet.dart';
+import 'go_pro_screen.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../widgets/ad_banner.dart';
@@ -52,9 +55,37 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
   final Map<int, VideoPlayerController> _controllers = {};
   final Set<int> _loading = {};
   final Set<int> _failed = {};
-  final Set<int> _preparing = {}; // episode not mirrored yet (ready:false)
+  final Set<int> _preparing = {}; // episode genuinely still mirroring (202, no error)
   final Set<int> _retried = {}; // one retry per episode
   final Map<int, String> _errMsg = {};
+
+  /// Server-side refusals keyed by episode index: `pro_required` / `vip_required`
+  /// (403 paywalls) or `no_source` (404). Distinct from `_locked`, which is the
+  /// client-side coin/free-episode gate. These used to be folded into
+  /// `_preparing`, so a paywall read as "still being mirrored" and the viewer
+  /// waited for content that was never going to unlock on its own.
+  final Map<int, String> _denied = {};
+
+  // ---- playback markers (web parity: watchPlayer.marks/enterOutro/showEndCard)
+  /// Intro-skip button is showing for the current episode.
+  bool _showSkip = false;
+
+  /// Outro marker already fired for this episode — guards against a double
+  /// countdown/card, and stops the real-end fallback re-firing after it.
+  bool _outroFired = false;
+
+  /// End-of-series card is up (rate + comment).
+  bool _finished = false;
+
+  /// "ตอนต่อไปกำลังจะเริ่ม" countdown, in seconds; null = not counting.
+  int? _nextIn;
+  Timer? _nextTimer;
+
+  /// Countdown length before auto-advancing at the credits marker.
+  static const _nextCountdownSeconds = 10;
+
+  /// "ข้ามอัตโนมัติ" preference, read once and toggled from the skip control.
+  bool _autoSkipIntro = false;
 
   NetwixApi? _api;
   CatalogDb? _db;
@@ -92,7 +123,8 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
       _api = context.read<NetwixApi>();
       _db = context.read<CatalogDb>();
       _member = context.read<MemberState>();
-      _isPro = context.read<AppState>().isPro || _member!.isPro;
+      _isPro = _member!.isPro;
+      _autoSkipIntro = context.read<AppState>().autoSkipIntro;
       // Count the watch once per opened title (deduped server-side).
       unawaited(_api!.recordView(c.id));
       _ensure(_current);
@@ -104,6 +136,7 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
   @override
   void dispose() {
     _saveResume(_current);
+    _nextTimer?.cancel();
     for (final ctrl in _controllers.values) {
       ctrl.removeListener(_onTick);
       ctrl.dispose();
@@ -138,6 +171,84 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
     }
   }
 
+  void _openGoPro() {
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const GoProScreen()));
+  }
+
+  /// Spend gold to open a VIP title. Confirms first (this costs real money) and
+  /// re-resolves the stream on success.
+  Future<void> _unlockVipAt(int index) async {
+    final api = _api;
+    if (api == null) return;
+    if (!(_member?.isLoggedIn ?? false)) {
+      await showLoginSheet(context);
+      if (!mounted || !(_member?.isLoggedIn ?? false)) return;
+    }
+
+    final l = context.read<AppState>().l;
+    final access = await api.fetchVipAccess(c.id);
+    if (!mounted) return;
+
+    // Already open (Pro or previously unlocked) — just retry the stream.
+    if (access != null && access.watchable) {
+      await _ensure(index);
+      return;
+    }
+
+    final cost = access?.costGold ?? 0;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        backgroundColor: T.surface,
+        title: Text(l.pick('ปลดล็อกโซน VIP', 'Unlock VIP'),
+            style: AppTheme.display(16, weight: FontWeight.w700)),
+        content: Text(
+          l.pick('ใช้ $cost เหรียญทองเพื่อปลดล็อก "${c.title}" ถาวร',
+              'Spend $cost gold to unlock "${c.title}" permanently'),
+          style: AppTheme.body(13.5, color: T.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dctx).pop(false),
+            child: Text(l.pick('ยกเลิก', 'Cancel'), style: AppTheme.body(13, color: T.textMuted)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dctx).pop(true),
+            child: Text(l.pick('ปลดล็อก', 'Unlock'), style: AppTheme.body(13, color: T.accent)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    final res = await api.unlockVip(c.id);
+    if (!mounted) return;
+
+    if (!res.ok) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(_vipErrorText(res.error, l)),
+      ));
+      return;
+    }
+
+    // Balances moved — refresh the member so the coin UI doesn't go stale.
+    if (res.wallet?.membership != null) {
+      _member?.applyMembershipState(res.wallet!.membership!);
+    }
+    await _ensure(index);
+    if (mounted && index == _current) {
+      _controllers[index]
+        ?..addListener(_onTick)
+        ..play();
+    }
+  }
+
+  String _vipErrorText(String? code, L10n l) => switch (code) {
+        'insufficient' => l.pick('เหรียญทองไม่พอ', 'Not enough gold'),
+        'network' => l.pick('เชื่อมต่อไม่ได้ ลองใหม่อีกครั้ง', 'Connection failed — try again'),
+        _ => l.pick('ปลดล็อกไม่สำเร็จ ลองใหม่อีกครั้ง', 'Unlock failed — try again'),
+      };
+
   Future<void> _ensure(int index) async {
     if (index < 0 || index >= eps.length) return;
     if (_locked(index)) return; // don't stream a locked episode
@@ -148,6 +259,7 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
     _loading.add(index);
     _failed.remove(index);
     _preparing.remove(index);
+    _denied.remove(index);
 
     try {
       final src = await _api!.resolveSource(ep.id);
@@ -160,9 +272,14 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
         return;
       }
       if (!src.ready || src.url == null) {
-        // NetWix hasn't mirrored this episode yet — show "preparing".
         _loading.remove(index);
-        _preparing.add(index);
+        if (src.error != null) {
+          // A paywall or a dead source — say so, don't pretend it's mirroring.
+          _denied[index] = src.error!;
+        } else {
+          // Genuinely not mirrored yet.
+          _preparing.add(index);
+        }
         setState(() {});
         return;
       }
@@ -222,6 +339,7 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
     }
     _current = index;
     _advancing = false;
+    _resetMarks();
 
     final cur = _controllers[index];
     if (cur != null) {
@@ -250,8 +368,14 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
       _saveResume(_current);
     }
 
-    // autoplay-next → swipe to the next episode
+    _marks(ctrl);
+
+    // autoplay-next → swipe to the next episode. Stays as the FALLBACK for a
+    // title with no outro marker (and if the marker somehow never fired);
+    // `_outroFired` keeps it from racing the countdown/end-card.
     if (!_advancing &&
+        !_outroFired &&
+        !_finished &&
         ctrl.value.duration > Duration.zero &&
         ctrl.value.position >= ctrl.value.duration &&
         !ctrl.value.isPlaying &&
@@ -261,6 +385,17 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
           duration: const Duration(milliseconds: 350), curve: Curves.easeOut);
     }
 
+    // Real end with no marker: last episode of a multi-episode title → end card.
+    if (!_outroFired &&
+        !_finished &&
+        ctrl.value.duration > Duration.zero &&
+        ctrl.value.position >= ctrl.value.duration &&
+        !ctrl.value.isPlaying &&
+        _current >= eps.length - 1 &&
+        eps.length > 1) {
+      _showEndCard();
+    }
+
     // Auto-hide the controls after a few idle seconds of playback (web parity).
     if (_chrome &&
         ctrl.value.isPlaying &&
@@ -268,6 +403,112 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
       _chrome = false;
     }
     if (mounted) setState(() {});
+  }
+
+  // ------------------------------------------------------ playback markers
+
+  /// Runs every tick. Mirrors the web's `marks()`:
+  ///  - inside the intro window → offer "ข้ามอินโทร" (auto-skip if the user opted in)
+  ///  - within `outroSeconds` of the end → `_enterOutro()` once
+  ///
+  /// Uses the LIVE video duration, not `duration_minutes` metadata, because the
+  /// outro marker is measured from the end and metadata is often rounded/absent.
+  void _marks(VideoPlayerController ctrl) {
+    final ep = eps[_current];
+    final t = ctrl.value.position.inSeconds;
+    final dur = ctrl.value.duration.inSeconds;
+
+    final introEnd = ep.introEndSeconds;
+    final wantSkip = introEnd > 1 && t >= 1 && t < introEnd;
+    if (wantSkip != _showSkip) _showSkip = wantSkip;
+
+    if (wantSkip && _autoSkipIntro) {
+      _skipIntro();
+      return;
+    }
+
+    final outro = ep.outroSeconds;
+    if (!_outroFired && outro > 0 && dur > 0 && t > 5 && (dur - t) <= outro) {
+      _enterOutro();
+    }
+  }
+
+  void _skipIntro() {
+    final ctrl = _controllers[_current];
+    final introEnd = eps[_current].introEndSeconds;
+    if (ctrl == null || introEnd <= 0) return;
+    ctrl.seekTo(Duration(seconds: introEnd));
+    _showSkip = false;
+  }
+
+  /// Credits reached on the current episode. Last episode → the rate/comment
+  /// card; otherwise → the next-episode countdown. Firing HERE rather than at
+  /// the true end is the whole point: the viewer is still watching, instead of
+  /// having already closed the app during the credits.
+  void _enterOutro() {
+    _outroFired = true;
+    final isLast = _current >= eps.length - 1;
+    if (isLast) {
+      // Movies qualify too when they carry an outro marker (web parity).
+      if (eps.length > 1 || eps[_current].outroSeconds > 0) {
+        _showEndCard();
+      }
+    } else {
+      _startNextCountdown();
+    }
+  }
+
+  void _showEndCard() {
+    if (_finished) return;
+    _outroFired = true;
+    _finished = true;
+    _cancelNext();
+    if (mounted) setState(() {});
+  }
+
+  void _startNextCountdown() {
+    _nextTimer?.cancel();
+    _nextIn = _nextCountdownSeconds;
+    _nextTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) {
+        t.cancel();
+        return;
+      }
+      final left = (_nextIn ?? 0) - 1;
+      if (left <= 0) {
+        t.cancel();
+        _nextIn = null;
+        _playNextNow();
+      } else {
+        setState(() => _nextIn = left);
+      }
+    });
+    if (mounted) setState(() {});
+  }
+
+  void _cancelNext() {
+    _nextTimer?.cancel();
+    _nextTimer = null;
+    if (_nextIn != null) {
+      _nextIn = null;
+      if (mounted) setState(() {});
+    }
+  }
+
+  void _playNextNow() {
+    _cancelNext();
+    if (_advancing || _current >= eps.length - 1) return;
+    _advancing = true;
+    _pageController.nextPage(
+        duration: const Duration(milliseconds: 350), curve: Curves.easeOut);
+  }
+
+  /// Reset per-episode marker state — the web does this in `load()`.
+  void _resetMarks() {
+    _outroFired = false;
+    _showSkip = false;
+    _finished = false;
+    _cancelNext();
   }
 
   void _saveResume(int index) {
@@ -436,7 +677,7 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
   Widget build(BuildContext context) {
     final l = context.watch<AppState>().l;
     final member = context.watch<MemberState>(); // rebuild lock overlays after unlock/login
-    _isPro = context.watch<AppState>().isPro || member.isPro;
+    _isPro = member.isPro;
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
@@ -450,12 +691,15 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
               controller: _controllers[index],
               failed: _failed.contains(index),
               preparing: _preparing.contains(index),
+              deniedReason: _denied[index],
               errorText: _errMsg[index],
               locked: _locked(index),
               episode: eps[index],
               unlockCost: _member?.unlockCost ?? 5,
               fullscreen: _fullscreen,
               onUnlock: () => _unlockAt(index),
+              onGoPro: _openGoPro,
+              onUnlockVip: () => _unlockVipAt(index),
               onTapVideo: index == _current ? _onVideoTap : null,
               onRetry: () => _ensure(index),
               l: l,
@@ -574,6 +818,122 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
               ),
             ),
           ),
+
+          // Skip-intro pill — above the scrubber, only inside the intro window.
+          if (_showSkip && !_finished && _nextIn == null)
+            Positioned(right: 14, bottom: 96, child: SafeArea(child: _skipIntroControl(l))),
+
+          // "ตอนต่อไปกำลังจะเริ่ม" countdown at the credits marker.
+          if (_nextIn != null && !_finished)
+            Positioned(right: 14, bottom: 96, child: SafeArea(child: _nextUpCard(l))),
+
+          // End-of-series card: rate + comment, at the credits marker or the
+          // real end of the last episode.
+          if (_finished) Positioned.fill(child: EndCard(content: c, l: l, onClose: _closeEndCard)),
+        ],
+      ),
+    );
+  }
+
+  void _closeEndCard() {
+    setState(() => _finished = false);
+  }
+
+  Widget _skipIntroControl(L10n l) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        GestureDetector(
+          onTap: () {
+            _skipIntro();
+            setState(() {});
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(T.rButton),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.fast_forward_rounded, size: 17, color: Colors.black),
+              const SizedBox(width: 6),
+              Text(l.pick('ข้ามอินโทร', 'Skip intro'),
+                  style: AppTheme.display(13.5, weight: FontWeight.w700, color: Colors.black)),
+            ]),
+          ),
+        ),
+        const SizedBox(height: 6),
+        GestureDetector(
+          onTap: () async {
+            final v = !_autoSkipIntro;
+            setState(() => _autoSkipIntro = v);
+            await context.read<AppState>().setAutoSkipIntro(v);
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.black54,
+              borderRadius: BorderRadius.circular(T.rButton),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(_autoSkipIntro ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
+                  size: 15, color: Colors.white),
+              const SizedBox(width: 5),
+              Text(l.pick('ข้ามอัตโนมัติ', 'Auto-skip'),
+                  style: AppTheme.body(11.5, color: Colors.white)),
+            ]),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _nextUpCard(L10n l) {
+    final next = _current + 1 < eps.length ? eps[_current + 1] : null;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      constraints: const BoxConstraints(maxWidth: 260),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.82),
+        borderRadius: BorderRadius.circular(T.rCard),
+        border: Border.all(color: T.hairlineStrong),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(l.pick('ตอนต่อไปกำลังจะเริ่ม · $_nextIn', 'Next episode in $_nextIn'),
+              style: AppTheme.body(12.5, weight: FontWeight.w700, color: Colors.white)),
+          if (next != null) ...[
+            const SizedBox(height: 2),
+            Text(next.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTheme.body(11.5, color: T.textMuted)),
+          ],
+          const SizedBox(height: 10),
+          Row(children: [
+            GestureDetector(
+              onTap: _playNextNow,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                    gradient: T.accentGradient, borderRadius: BorderRadius.circular(T.rButton)),
+                child: Text(l.pick('เล่นเลย', 'Play now'),
+                    style: AppTheme.display(12.5, weight: FontWeight.w700, color: T.onAccent)),
+              ),
+            ),
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: _cancelNext,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                child: Text(l.pick('ยกเลิก', 'Cancel'),
+                    style: AppTheme.body(12.5, color: T.textMuted)),
+              ),
+            ),
+          ]),
         ],
       ),
     );
@@ -667,12 +1027,15 @@ class _EpisodePage extends StatelessWidget {
     required this.controller,
     required this.failed,
     required this.preparing,
+    required this.deniedReason,
     required this.errorText,
     required this.locked,
     required this.episode,
     required this.unlockCost,
     required this.fullscreen,
     required this.onUnlock,
+    required this.onGoPro,
+    required this.onUnlockVip,
     required this.onTapVideo,
     required this.onRetry,
     required this.l,
@@ -681,6 +1044,9 @@ class _EpisodePage extends StatelessWidget {
   final VideoPlayerController? controller;
   final bool failed;
   final bool preparing;
+
+  /// Server refusal code (`pro_required` / `vip_required` / `no_source`), or null.
+  final String? deniedReason;
   final String? errorText;
   final bool locked;
   final Episode episode;
@@ -689,6 +1055,11 @@ class _EpisodePage extends StatelessWidget {
   /// Landscape-locked fullscreen mode (else the portrait TikTok feed).
   final bool fullscreen;
   final VoidCallback onUnlock;
+
+  /// Paywall CTAs for a server refusal. Null hides the button (the message still
+  /// tells the viewer what's actually wrong).
+  final VoidCallback? onGoPro;
+  final VoidCallback? onUnlockVip;
   final VoidCallback? onTapVideo;
   final VoidCallback onRetry;
   final L10n l;
@@ -735,6 +1106,61 @@ class _EpisodePage extends StatelessWidget {
         title: '${l.pick('ตอนที่', 'EP')} ${episode.number}',
         subtitle: l.pick('ตอนนี้ยังไม่พร้อมให้ชม', 'This episode is unavailable'),
       );
+    }
+
+    // The server refused this stream — a paywall or a dead source. Each needs its
+    // own message: telling someone to "check back soon" for content that needs a
+    // purchase (or is gone for good) just makes them wait for nothing.
+    if (deniedReason != null) {
+      switch (deniedReason) {
+        case 'pro_required':
+          return _StatusPage(
+            icon: Icons.workspace_premium_rounded,
+            title: l.pick('เฉพาะสมาชิก Pro', 'Pro members only'),
+            subtitle: l.pick(
+                'เรื่องนี้เรต 18+ ต้องเป็นสมาชิก Pro จึงจะรับชมได้', 'This 18+ title requires a Pro membership'),
+            action: onGoPro == null
+                ? null
+                : GestureDetector(
+                    onTap: onGoPro,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                      decoration: BoxDecoration(
+                          gradient: T.accentGradient, borderRadius: BorderRadius.circular(T.rButton)),
+                      child: Text(l.pick('สมัคร Pro', 'Get Pro'),
+                          style: AppTheme.display(14, weight: FontWeight.w700, color: T.onAccent)),
+                    ),
+                  ),
+          );
+        case 'vip_required':
+          return _StatusPage(
+            icon: Icons.diamond_rounded,
+            title: l.pick('โซน VIP', 'VIP zone'),
+            subtitle: l.pick('ปลดล็อกเรื่องนี้ด้วยเหรียญทอง', 'Unlock this title with gold coins'),
+            action: onUnlockVip == null
+                ? null
+                : GestureDetector(
+                    onTap: onUnlockVip,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                      decoration: BoxDecoration(
+                          gradient: T.accentGradient, borderRadius: BorderRadius.circular(T.rButton)),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        const Text('🥇', style: TextStyle(fontSize: 15)),
+                        const SizedBox(width: 8),
+                        Text(l.pick('ปลดล็อก VIP', 'Unlock VIP'),
+                            style: AppTheme.display(14, weight: FontWeight.w700, color: T.onAccent)),
+                      ]),
+                    ),
+                  ),
+          );
+        default: // no_source — gone upstream; retrying will never help.
+          return _StatusPage(
+            icon: Icons.block_rounded,
+            title: '${l.pick('ตอนที่', 'EP')} ${episode.number}',
+            subtitle: l.pick('ตอนนี้ไม่มีให้รับชมแล้ว', 'This episode is no longer available'),
+          );
+      }
     }
 
     if (preparing) {

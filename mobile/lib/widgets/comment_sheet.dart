@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../l10n/l10n.dart';
 import '../models/member.dart';
+import '../services/format.dart';
 import '../services/netwix_api.dart';
 import '../state/app_state.dart';
 import '../state/member_state.dart';
@@ -141,7 +142,7 @@ class _CommentSheetState extends State<_CommentSheet> {
                       : ListView.builder(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           itemCount: _comments.length,
-                          itemBuilder: (_, i) => _row(_comments[i]),
+                          itemBuilder: (_, i) => _row(_comments[i], l),
                         ),
             ),
             _composer(l),
@@ -151,19 +152,48 @@ class _CommentSheetState extends State<_CommentSheet> {
     );
   }
 
-  Widget _row(Comment c) {
+  Widget _row(Comment c, L10n l) {
+    // Colour + initial tile, matching the web (comments never show a photo).
+    final tint = HexAvatar.parseColor(c.avatarColor);
+    final when = c.createdAt;
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const HexAvatar(size: 34, child: Icon(Icons.person, color: T.accentHi, size: 16)),
+          HexAvatar(
+            size: 34,
+            tint: tint,
+            child: Center(
+              child: Text(
+                c.initial,
+                style: AppTheme.display(14, weight: FontWeight.w700, color: T.textPrimary),
+              ),
+            ),
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(c.author, style: AppTheme.body(12.5, weight: FontWeight.w700, color: T.textPrimary)),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        c.author,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTheme.body(12.5, weight: FontWeight.w700, color: T.textPrimary),
+                      ),
+                    ),
+                    if (when != null) ...[
+                      const SizedBox(width: 8),
+                      Text(Format.ago(when, thai: l.isTh),
+                          style: AppTheme.body(11, color: T.textFaint)),
+                    ],
+                  ],
+                ),
                 const SizedBox(height: 2),
                 Text(c.text, style: AppTheme.body(13, color: T.textSecondary)),
               ],

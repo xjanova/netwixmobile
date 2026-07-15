@@ -13,6 +13,8 @@ class Episode {
     this.isMirrored = false,
     this.isUnavailable = false,
     this.sort = 0,
+    this.introEndSeconds = 0,
+    this.outroSeconds = 0,
   });
 
   final int id;
@@ -33,6 +35,15 @@ class Episode {
   final bool isUnavailable;
   final int sort;
 
+  /// Effective playback markers in seconds (0 = unset), already merged with the
+  /// title's defaults server-side — a NULL marker on an episode means "inherit
+  /// the content value", and EpisodeResource resolves that before sending.
+  ///
+  /// [introEndSeconds] is ABSOLUTE from the start (seek here to skip the intro).
+  /// [outroSeconds] is the credits length measured FROM THE END.
+  final int introEndSeconds;
+  final int outroSeconds;
+
   String get label => title.isNotEmpty ? title : 'ตอนที่ $number';
 
   factory Episode.fromJson(Map<String, dynamic> j) => Episode(
@@ -47,5 +58,7 @@ class Episode {
         isMirrored: j['is_mirrored'] == true,
         isUnavailable: j['is_unavailable'] == true,
         sort: (j['sort'] as num?)?.toInt() ?? 0,
+        introEndSeconds: (j['intro_end_seconds'] as num?)?.toInt() ?? 0,
+        outroSeconds: (j['outro_seconds'] as num?)?.toInt() ?? 0,
       );
 }

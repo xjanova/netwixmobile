@@ -74,7 +74,7 @@ class MemberState extends ChangeNotifier {
   DateTime? get proUntil => _referral?.proUntil ?? _member?.proUntil;
 
   /// The link to share when inviting friends.
-  String get shareLink => _referral?.link ?? 'https://netwix.online/r/$referralCode';
+  String get shareLink => _referral?.link ?? NetwixApi.referralUrl(referralCode);
 
   void init() {
     _member = _store.member;

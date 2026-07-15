@@ -21,6 +21,12 @@ class Content {
     this.views = 0,
     this.episodesCount = 0,
     this.genres = const [],
+    this.isVip = false,
+    this.vipPriceGold = 0,
+    this.isAdult = false,
+    this.requiresPro = false,
+    this.introEndSeconds = 0,
+    this.outroSeconds = 0,
   });
 
   final int id;
@@ -44,8 +50,32 @@ class Content {
   final int episodesCount;
   final List<String> genres;
 
+  /// VIP-zone title — needs gold to unlock (or Pro, when the admin allows it).
+  final bool isVip;
+
+  /// Per-title gold price; 0 = fall back to the config default.
+  final int vipPriceGold;
+
+  /// 18+/20+ rating.
+  final bool isAdult;
+
+  /// Watching needs an active Pro membership (adult titles do).
+  final bool requiresPro;
+
+  /// Content-level playback markers, in seconds (0 = unset). Episodes may
+  /// override these; the API already resolves the effective value per episode.
+  final int introEndSeconds;
+
+  /// Credits length measured FROM THE END — trigger when
+  /// `duration - position <= outroSeconds`. One value works across episodes of
+  /// differing length, which is why it isn't an absolute timestamp.
+  final int outroSeconds;
+
   bool get isVertical => type == 'vertical';
   bool get isMovie => type == 'movie';
+
+  /// Needs some kind of purchase before it will play.
+  bool get isGated => isVip || requiresPro;
 
   String get displayImageUrl => posterUrl.isNotEmpty ? posterUrl : backdropUrl;
   String get heroImageUrl => backdropUrl.isNotEmpty ? backdropUrl : posterUrl;
@@ -79,6 +109,12 @@ class Content {
         durationMinutes: (j['duration_minutes'] as num?)?.toInt(),
         views: (j['views'] as num?)?.toInt() ?? 0,
         episodesCount: (j['episodes_count'] as num?)?.toInt() ?? 0,
+        isVip: j['is_vip'] == true,
+        vipPriceGold: (j['vip_price_gold'] as num?)?.toInt() ?? 0,
+        isAdult: j['is_adult'] == true,
+        requiresPro: j['requires_pro'] == true,
+        introEndSeconds: (j['intro_end_seconds'] as num?)?.toInt() ?? 0,
+        outroSeconds: (j['outro_seconds'] as num?)?.toInt() ?? 0,
         genres: (j['genres'] is List)
             ? (j['genres'] as List)
                 .whereType<Map>()

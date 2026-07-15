@@ -1,3 +1,5 @@
+import '../services/netwix_api.dart';
+
 /// The server's view of a member's referral programme + the launch promo:
 /// **"invite [target] friends who qualify → [rewardMonths] months of Pro, free,
 /// once."**
@@ -40,7 +42,7 @@ class ReferralStatus {
   /// When the referral-granted Pro expires (null if not granted yet).
   final DateTime? proUntil;
 
-  /// Server-provided share link (falls back to `netwix.online/r/{code}`).
+  /// Server-provided share link (falls back to the register page + ref code).
   final String? shareUrl;
 
   bool get unlocked => qualified >= target;
@@ -49,7 +51,7 @@ class ReferralStatus {
   bool get proActive => proUntil != null && proUntil!.isAfter(DateTime.now());
 
   String get link =>
-      (shareUrl != null && shareUrl!.isNotEmpty) ? shareUrl! : 'https://netwix.online/r/$code';
+      (shareUrl != null && shareUrl!.isNotEmpty) ? shareUrl! : NetwixApi.referralUrl(code);
 
   factory ReferralStatus.fromJson(Map<String, dynamic> j) => ReferralStatus(
         code: '${j['code'] ?? j['referral_code'] ?? ''}',

@@ -5,6 +5,7 @@ import '../models/content.dart';
 import '../models/episode.dart';
 import '../models/member.dart';
 import '../models/mission.dart';
+import '../models/wallet.dart';
 
 /// Client for the NetWix mobile API (`https://netwix.online/api/app/*`).
 ///
@@ -26,6 +27,16 @@ class NetwixApi {
 
   static const String origin = 'https://netwix.online';
   static const String baseUrl = '$origin/api/app';
+
+  /// Public web page for a title. Must match the web route `/title/{content}`,
+  /// which binds by slug (Content::getRouteKeyName). The app previously shared
+  /// `/t/{slug}`, a route that has never existed — every shared link 404'd.
+  static String titleUrl(String slug) => '$origin/title/$slug';
+
+  /// Referral invite link. The web has no `/r/{code}` route; the register page
+  /// reads the code from `?ref=` (RegisterController redeems it on signup).
+  static String referralUrl(String code) =>
+      '$origin/register?ref=${Uri.encodeQueryComponent(code)}';
 
   final Dio _dio;
   String? _token;
@@ -518,6 +529,115 @@ class NetwixApi {
     }
   }
 
+  // ----------------------------------------------------------- gold wallet
+  // Thin client over WalletController (auth.apptoken). The web stays
+  // authoritative: every balance, rate and cap here is server-computed, and the
+  // app only ever renders what the snapshot reports.
+
+  /// Balances + convert rules + USDT config + VIP config, in one trip.
+  Future<WalletState?> fetchWallet() async {
+    try {
+      final d = _data(await _dio.get('/wallet', options: _opts));
+      return d == null ? null : WalletState.fromJson(d);
+    } catch (e) {
+      if (kDebugMode) debugPrint('netwix wallet: $e');
+      return null;
+    }
+  }
+
+  /// Convert silver → gold. Returns the refreshed wallet, or the server's error
+  /// code (insufficient funds, over the daily cap, convert disabled).
+  Future<WalletResult> convertGold(int gold) async {
+    return _walletWrite(() => _dio.post('/gold/convert',
+        data: {'gold': gold},
+        options: Options(headers: _opts.headers, validateStatus: (s) => s != null && s < 500)));
+  }
+
+  /// Buy Pro with gold (instant, no chain).
+  Future<WalletResult> buyProWithGold() async {
+    return _walletWrite(() => _dio.post('/pro/buy-gold',
+        options: Options(headers: _opts.headers, validateStatus: (s) => s != null && s < 500)));
+  }
+
+  Future<WalletResult> _walletWrite(Future<Response> Function() send) async {
+    try {
+      final r = await send();
+      final b = r.data;
+      final ok = b is Map && b['success'] == true;
+      final data = (b is Map && b['data'] is Map) ? (b['data'] as Map).cast<String, dynamic>() : null;
+      return WalletResult(
+        ok: ok,
+        error: (b is Map ? b['error'] : null) as String?,
+        wallet: data == null ? null : WalletState.fromJson(data),
+      );
+    } catch (e) {
+      if (kDebugMode) debugPrint('netwix walletWrite: $e');
+      return const WalletResult(ok: false, error: 'network');
+    }
+  }
+
+  /// VIP access for a title: open | pro | unlocked | locked (+ gold price).
+  Future<VipAccess?> fetchVipAccess(int contentId) async {
+    try {
+      final d = _data(await _dio.get('/content/$contentId/vip', options: _opts));
+      return d == null ? null : VipAccess.fromJson(d);
+    } catch (e) {
+      if (kDebugMode) debugPrint('netwix vipAccess($contentId): $e');
+      return null;
+    }
+  }
+
+  /// Spend gold to permanently unlock a VIP title.
+  Future<WalletResult> unlockVip(int contentId) async {
+    try {
+      final r = await _dio.post('/content/$contentId/vip/unlock',
+          options: Options(headers: _opts.headers, validateStatus: (s) => s != null && s < 500));
+      final b = r.data;
+      final ok = b is Map && b['success'] == true;
+      final data = (b is Map && b['data'] is Map) ? (b['data'] as Map).cast<String, dynamic>() : null;
+      final ms = (data?['membership'] is Map)
+          ? (data!['membership'] as Map).cast<String, dynamic>()
+          : null;
+      return WalletResult(
+        ok: ok,
+        error: (b is Map ? b['error'] : null) as String?,
+        access: data?['access'] as String?,
+        wallet: ms == null ? null : WalletState.fromJson(ms),
+      );
+    } catch (e) {
+      if (kDebugMode) debugPrint('netwix unlockVip($contentId): $e');
+      return const WalletResult(ok: false, error: 'network');
+    }
+  }
+
+  /// Create a USDT (BEP20) order. `purpose` is 'gold' (needs [usdt]) or 'pro'.
+  Future<UsdtOrder?> createUsdtOrder({required String purpose, double? usdt}) async {
+    try {
+      final r = await _dio.post('/usdt/order',
+          data: {'purpose': purpose, 'usdt': ?usdt},
+          options: Options(headers: _opts.headers, validateStatus: (s) => s != null && s < 500));
+      final d = _data(r);
+      return d == null ? null : UsdtOrder.fromJson(d);
+    } catch (e) {
+      if (kDebugMode) debugPrint('netwix createUsdtOrder: $e');
+      return null;
+    }
+  }
+
+  /// Poll an order — the server live-verifies it against the chain. Keyed by the
+  /// order's `reference` (UsdtOrder binds on that, not an id).
+  Future<UsdtOrder?> checkUsdtOrder(String reference) async {
+    try {
+      final r = await _dio.post('/usdt/order/${Uri.encodeComponent(reference)}/check',
+          options: Options(headers: _opts.headers, validateStatus: (s) => s != null && s < 500));
+      final d = _data(r);
+      return d == null ? null : UsdtOrder.fromJson(d);
+    } catch (e) {
+      if (kDebugMode) debugPrint('netwix checkUsdtOrder($reference): $e');
+      return null;
+    }
+  }
+
   List<Content> _contentList(dynamic v) {
     if (v is! List) return const [];
     return v.whereType<Map>().map((m) => Content.fromJson(m.cast<String, dynamic>())).toList();
@@ -584,17 +704,34 @@ class NetwixDetail {
 }
 
 class NetwixSource {
-  const NetwixSource({required this.ready, this.kind, this.url});
+  const NetwixSource({required this.ready, this.kind, this.url, this.error});
   final bool ready;
   final String? kind; // 'mp4' | 'hls'
   final String? url;
 
+  /// Why the stream isn't playable, straight from the server:
+  /// `pro_required` / `vip_required` (403 paywalls) or `no_source` (404, gone).
+  /// A 202 carries no error — that one really is "still being mirrored".
+  /// Without this the app rendered every paywall as a mirroring delay, so a
+  /// member who needed to buy something just waited forever.
+  final String? error;
+
   bool get isHls => kind == 'hls';
+
+  /// Blocked behind a purchase rather than a temporary mirroring delay.
+  bool get isLocked => error == 'pro_required' || error == 'vip_required';
+
+  /// The source is gone upstream — retrying will never help.
+  bool get isGone => error == 'no_source';
+
+  /// Genuinely still mirroring: not ready, but nothing is blocking it.
+  bool get isPreparing => !ready && error == null;
 
   factory NetwixSource.fromJson(Map<String, dynamic> j) => NetwixSource(
         ready: j['ready'] == true,
         kind: j['kind'] as String?,
         url: j['url'] as String?,
+        error: j['error'] as String?,
       );
 }
 

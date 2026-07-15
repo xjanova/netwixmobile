@@ -48,8 +48,8 @@ class _TeamScreenState extends State<TeamScreen> {
     final l = context.read<AppState>().l;
     await SharePlus.instance.share(ShareParams(
       text: l.pick(
-        'มาดูหนังฟรีกับ NetWix กับฉันสิ! ใช้โค้ด $code รับ Pro ฟรี 🎬\nhttps://netwix.online/r/$code',
-        'Join me on NetWix — free movies! Use code $code for free Pro 🎬\nhttps://netwix.online/r/$code',
+        'มาดูหนังฟรีกับ NetWix กับฉันสิ! ใช้โค้ด $code รับ Pro ฟรี 🎬\n${NetwixApi.referralUrl(code)}',
+        'Join me on NetWix — free movies! Use code $code for free Pro 🎬\n${NetwixApi.referralUrl(code)}',
       ),
     ));
   }

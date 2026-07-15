@@ -13,6 +13,7 @@ import '../widgets/common.dart';
 import '../widgets/login_sheet.dart';
 import 'earn_coins_screen.dart';
 import 'go_pro_screen.dart';
+import 'wallet_screen.dart';
 import 'whats_new_screen.dart';
 
 /// 07 — Menu / Settings · เมนู. Bilingual rows (Thai bold + English muted).
@@ -24,7 +25,7 @@ class MenuScreen extends StatelessWidget {
     final app = context.watch<AppState>();
     final l = app.l;
     final member = context.watch<MemberState>();
-    final effectivePro = app.isPro || member.isPro;
+    final effectivePro = member.isPro;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
@@ -41,6 +42,10 @@ class MenuScreen extends StatelessWidget {
         const SizedBox(height: 16),
         _languageRow(context, app),
         const SizedBox(height: 8),
+        if (member.isLoggedIn)
+          _row(context, Icons.account_balance_wallet_rounded, 'กระเป๋าเหรียญทอง', 'Gold wallet',
+              onTap: () => Navigator.of(context)
+                  .push(MaterialPageRoute(builder: (_) => const WalletScreen()))),
         _row(context, Icons.notifications_rounded, 'การแจ้งเตือน', 'Notifications',
             onTap: () => _soon(context, l)),
         _row(context, Icons.system_update_rounded, 'อัปเดต', 'Updates',
@@ -142,7 +147,7 @@ class MenuScreen extends StatelessWidget {
     }
 
     final m = member.member!;
-    final pro = app.isPro || member.isPro;
+    final pro = member.isPro;
     return GlassCard(
       child: Row(
         children: [

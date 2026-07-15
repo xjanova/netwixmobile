@@ -37,6 +37,33 @@ class Format {
     return thai ? '$days วัน' : '$days days';
   }
 
+  /// dd/mm/yyyy in local time. Locale-independent digits on purpose: this is
+  /// used for entitlement dates (Pro expiry), which must read identically
+  /// whatever language the app is in.
+  static String date(DateTime d) {
+    final l = d.toLocal();
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${two(l.day)}/${two(l.month)}/${l.year}';
+  }
+
+  /// A short relative time ("5 นาทีที่แล้ว" / "5m ago"), matching what the web
+  /// renders for comments via diffForHumans().
+  static String ago(DateTime when, {bool thai = true}) {
+    final d = DateTime.now().difference(when);
+    if (d.inSeconds < 60) return thai ? 'เมื่อสักครู่' : 'just now';
+    if (d.inMinutes < 60) {
+      return thai ? '${d.inMinutes} นาทีที่แล้ว' : '${d.inMinutes}m ago';
+    }
+    if (d.inHours < 24) {
+      return thai ? '${d.inHours} ชั่วโมงที่แล้ว' : '${d.inHours}h ago';
+    }
+    if (d.inDays < 30) {
+      return thai ? '${d.inDays} วันที่แล้ว' : '${d.inDays}d ago';
+    }
+    // Older than a month — an exact date is more useful than "13 months ago".
+    return date(when);
+  }
+
   /// mm:ss or h:mm:ss for a duration in seconds.
   static String duration(int totalSeconds) {
     final s = math.max(0, totalSeconds);
