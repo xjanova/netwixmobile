@@ -14,13 +14,15 @@ import '../services/format.dart';
 import '../services/netwix_api.dart';
 import '../state/app_state.dart';
 import '../state/member_state.dart';
+import '../models/ad.dart';
+import '../services/ad_service.dart';
 import '../widgets/end_card.dart';
 import '../widgets/login_sheet.dart';
+import '../widgets/preroll_ad.dart';
 import '../widgets/unlock_sheet.dart';
 import 'go_pro_screen.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
-import '../widgets/ad_banner.dart';
 import '../widgets/poster_image.dart';
 
 /// 08 — Playback · เล่นซีรีส์.
@@ -87,9 +89,14 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
   /// "ข้ามอัตโนมัติ" preference, read once and toggled from the skip control.
   bool _autoSkipIntro = false;
 
+  /// Pre-roll ad for this title, once per opened title (like the web, which
+  /// serves one per /watch page load — not one per episode).
+  PrerollAd? _preroll;
+
   NetwixApi? _api;
   CatalogDb? _db;
   MemberState? _member;
+  AdFrequency? _adFreq;
   bool _isPro = false;
 
   DateTime _lastResumeSave = DateTime.fromMillisecondsSinceEpoch(0);
@@ -125,8 +132,10 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
       _member = context.read<MemberState>();
       _isPro = _member!.isPro;
       _autoSkipIntro = context.read<AppState>().autoSkipIntro;
+      _adFreq = context.read<AdFrequency>();
       // Count the watch once per opened title (deduped server-side).
       unawaited(_api!.recordView(c.id));
+      unawaited(_loadPreroll());
       _ensure(_current);
       _ensure(_current + 1);
       _ensure(_current - 1);
@@ -403,6 +412,41 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
       _chrome = false;
     }
     if (mounted) setState(() {});
+  }
+
+  // ------------------------------------------------------------ pre-roll ad
+
+  /// Fetch the pre-roll for this title. The server decides eligibility
+  /// (targeting, schedule, hide_for_pro); the client only applies `frequency`,
+  /// which is per-device. Pro members skip the request entirely — no point
+  /// asking for an ad we'd never show.
+  Future<void> _loadPreroll() async {
+    if (_isPro) return;
+    final ad = await _api?.fetchPreroll(c.id);
+    if (!mounted || ad == null) return;
+    if (_adFreq?.mayShow(ad.id, ad.frequency) == false) return;
+
+    setState(() => _preroll = ad);
+    _pauseForAd();
+    await _adFreq?.markShown(ad.id, ad.frequency);
+  }
+
+  void _pauseForAd() {
+    for (final ctrl in _controllers.values) {
+      ctrl.pause();
+    }
+  }
+
+  /// Ad finished or was skipped — resume the current episode.
+  void _onAdFinished() {
+    if (!mounted) return;
+    setState(() => _preroll = null);
+    final ctrl = _controllers[_current];
+    if (ctrl != null && ctrl.value.isInitialized) {
+      ctrl.play();
+    } else {
+      _ensure(_current);
+    }
   }
 
   // ------------------------------------------------------ playback markers
@@ -807,7 +851,6 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            if (!_fullscreen) const AdBanner(placement: 'player', height: 56),
                             _scrubber(),
                           ],
                         ),
@@ -830,6 +873,12 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
           // End-of-series card: rate + comment, at the credits marker or the
           // real end of the last episode.
           if (_finished) Positioned.fill(child: EndCard(content: c, l: l, onClose: _closeEndCard)),
+
+          // Pre-roll ad — on top of everything, so it can't be tapped past.
+          if (_preroll case final ad?)
+            Positioned.fill(
+              child: PrerollAdOverlay(ad: ad, l: l, onFinished: _onAdFinished),
+            ),
         ],
       ),
     );

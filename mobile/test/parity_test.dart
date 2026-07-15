@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:netwix/models/ad.dart';
 import 'package:netwix/models/content.dart';
 import 'package:netwix/models/episode.dart';
 import 'package:netwix/models/member.dart';
@@ -117,6 +118,50 @@ void main() {
     test('an ordinary title is not gated', () {
       final c = Content.fromJson({'id': 1, 'slug': 's', 'title': 't'});
       expect(c.isGated, isFalse);
+    });
+  });
+
+  group('PrerollAd parses AdCampaign::toPlayerPayload', () {
+    test('an image campaign', () {
+      final a = PrerollAd.fromJson({
+        'id': 4,
+        'media_type': 'image',
+        'src': 'https://netwix.online/storage/ads/a.jpg',
+        'caption': 'ลดราคา',
+        'link_url': 'https://x.test',
+        'skippable': true,
+        'skip_after': 5,
+        'image_seconds': 8,
+        'frequency': 'daily',
+      });
+      expect(a, isNotNull);
+      expect(a!.isImage, isTrue);
+      expect(a.isYoutube, isFalse);
+      expect(a.imageSeconds, 8);
+      expect(a.frequency, 'daily');
+    });
+
+    test('a YouTube campaign has no src but is still renderable', () {
+      final a = PrerollAd.fromJson({
+        'id': 5,
+        'media_type': 'video',
+        'src': null,
+        'youtube': 'dQw4w9WgXcQ',
+        'skippable': false,
+      });
+      expect(a, isNotNull);
+      expect(a!.isYoutube, isTrue);
+      expect(a.skippable, isFalse);
+    });
+
+    test('a creative with nothing to show is treated as no ad', () {
+      expect(PrerollAd.fromJson({'id': 6, 'media_type': 'image'}), isNull);
+      expect(PrerollAd.fromJson({'id': 6, 'media_type': 'image', 'src': ''}), isNull);
+      expect(PrerollAd.fromJson(null), isNull);
+    });
+
+    test('null ad from the server is null, not a crash', () {
+      expect(PrerollAd.fromJson(null), isNull);
     });
   });
 

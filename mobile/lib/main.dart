@@ -68,9 +68,16 @@ Future<void> main() async {
   final api = NetwixApi();
   final db = await CatalogDb.open();
   final accountStore = await AccountStore.load();
+  final adFrequency = await AdFrequency.load();
   final memberState = MemberState(accountStore, api, AuthService(api))..init();
 
-  runApp(HiveApp(settings: settings, api: api, db: db, memberState: memberState));
+  runApp(HiveApp(
+    settings: settings,
+    api: api,
+    db: db,
+    memberState: memberState,
+    adFrequency: adFrequency,
+  ));
 }
 
 class HiveApp extends StatelessWidget {
@@ -80,12 +87,14 @@ class HiveApp extends StatelessWidget {
     required this.api,
     required this.db,
     required this.memberState,
+    required this.adFrequency,
   });
 
   final SettingsStore settings;
   final NetwixApi api;
   final CatalogDb db;
   final MemberState memberState;
+  final AdFrequency adFrequency;
 
   @override
   Widget build(BuildContext context) {
@@ -94,9 +103,7 @@ class HiveApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AppState(settings)),
         ChangeNotifierProvider(create: (_) => CatalogState(api, db)),
         ChangeNotifierProvider.value(value: memberState),
-        // Ad delivery (main.thaiprompt.online). Starts fetching+rotating now;
-        // a silent no-op until the ad backend goes live.
-        ChangeNotifierProvider(create: (_) => AdService()..start(placements: const ['player', 'home'])),
+        Provider<AdFrequency>.value(value: adFrequency),
         Provider<NetwixApi>.value(value: api),
         Provider<CatalogDb>(create: (_) => db),
         Provider<AutoUpdater>(create: (_) => AutoUpdater()),

@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
+import '../models/ad.dart';
 import '../models/content.dart';
 import '../models/episode.dart';
 import '../models/member.dart';
@@ -160,6 +161,20 @@ class NetwixApi {
       return NetwixSource.fromJson(data);
     } catch (e) {
       if (kDebugMode) debugPrint('netwix resolveSource($episodeId): $e');
+      return null;
+    }
+  }
+
+  /// The pre-roll ad the server picked for this title + viewer, or null.
+  /// Targeting/schedule/hide_for_pro are all decided server-side; a failure just
+  /// means no ad — it must never block playback.
+  Future<PrerollAd?> fetchPreroll(int contentId) async {
+    try {
+      final d = _data(await _dio.get('/content/$contentId/ad', options: _opts));
+      final ad = d?['ad'];
+      return ad is Map ? PrerollAd.fromJson(ad.cast<String, dynamic>()) : null;
+    } catch (e) {
+      if (kDebugMode) debugPrint('netwix preroll($contentId): $e');
       return null;
     }
   }
