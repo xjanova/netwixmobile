@@ -15,6 +15,7 @@ import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../widgets/common.dart';
 import '../widgets/login_sheet.dart';
+import '../widgets/poster_card.dart';
 import '../widgets/poster_image.dart';
 import '../widgets/unlock_sheet.dart';
 import 'playback_screen.dart';
@@ -432,7 +433,11 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                 children: [
                   _circleBtn(Icons.arrow_back_rounded, () => Navigator.of(context).pop()),
                   const SizedBox(width: 8),
-                  Pill(text: l.pick('ดูฟรี', 'FREE'), filled: true),
+                  // Don't promise "ดูฟรี" on a title that needs Pro or gold.
+                  if (lockBadge(c) case final badge?)
+                    badge
+                  else
+                    Pill(text: l.pick('ดูฟรี', 'FREE'), filled: true),
                   const Spacer(),
                   if (showPreview)
                     _circleBtn(

@@ -7,6 +7,7 @@ import 'package:netwix/models/wallet.dart';
 import 'package:netwix/services/format.dart';
 import 'package:netwix/services/netwix_api.dart';
 import 'package:netwix/theme/hex.dart';
+import 'package:netwix/widgets/poster_card.dart';
 
 void main() {
   group('share links match real web routes', () {
@@ -116,6 +117,31 @@ void main() {
     test('an ordinary title is not gated', () {
       final c = Content.fromJson({'id': 1, 'slug': 's', 'title': 't'});
       expect(c.isGated, isFalse);
+    });
+  });
+
+  group('lockBadge', () {
+    Content make({bool vip = false, bool adult = false, String maturity = ''}) =>
+        Content.fromJson({
+          'id': 1,
+          'slug': 's',
+          'title': 't',
+          'is_vip': vip,
+          'is_adult': adult,
+          'maturity': maturity,
+        });
+
+    test('an ordinary title gets no badge (so "ดูฟรี" still shows)', () {
+      expect(lockBadge(make()), isNull);
+    });
+
+    test('adult wins over VIP — they are the same titles, 18+ is the clearer warning', () {
+      expect(lockBadge(make(vip: true, adult: true, maturity: '18+')), isNotNull);
+      expect(lockBadge(make(vip: true, adult: true, maturity: '20+')), isNotNull);
+    });
+
+    test('a VIP-only title still gets a badge', () {
+      expect(lockBadge(make(vip: true)), isNotNull);
     });
   });
 

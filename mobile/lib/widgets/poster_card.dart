@@ -11,6 +11,27 @@ void openContent(BuildContext context, Content c) {
   Navigator.of(context).push(MaterialPageRoute(builder: (_) => SeriesDetailScreen(content: c)));
 }
 
+/// Access badge for a poster: VIP (gold-unlock) or the 18+/20+ rating, or null
+/// for an ordinary title.
+///
+/// VIP and adult are the SAME 343 titles today (adult == the VIP zone), so 18+
+/// wins the label — it's the more meaningful warning — and VIP is implied by the
+/// gold pip. Guests never receive these titles at all; the badge is for members.
+Widget? lockBadge(Content c) {
+  if (c.isAdult) {
+    return Pill(
+      text: c.maturity.isNotEmpty ? c.maturity : '18+',
+      color: const Color(0xFFC81E45),
+      filled: true,
+      textColor: Colors.white,
+    );
+  }
+  if (c.isVip) {
+    return const Pill(text: '🥇 VIP', color: Colors.black54, filled: true, textColor: Colors.white);
+  }
+  return null;
+}
+
 /// Portrait poster card used in the vertical rail and grid.
 class PortraitPosterCard extends StatelessWidget {
   const PortraitPosterCard({super.key, required this.content, this.width = 118});
@@ -37,6 +58,11 @@ class PortraitPosterCard extends StatelessWidget {
                     top: 6,
                     child: Pill(text: content.typeThai, filled: true),
                   ),
+                  // Access badge, top-right so it clears the type/views pills.
+                  // Without it a VIP/18+ title looked ordinary right up until
+                  // playback failed.
+                  if (lockBadge(content) case final badge?)
+                    Positioned(right: 6, top: 6, child: badge),
                   if (content.views > 0)
                     Positioned(
                       right: 6,
@@ -96,7 +122,12 @@ class FeaturedCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(children: [
-                    const Pill(text: 'ดูฟรี', filled: true),
+                    // "ดูฟรี" would be a lie on a VIP/18+ title — those need a
+                    // purchase or Pro, so badge them instead.
+                    if (lockBadge(content) case final badge?)
+                      badge
+                    else
+                      const Pill(text: 'ดูฟรี', filled: true),
                     const SizedBox(width: 6),
                     Pill(text: content.typeThai, color: Colors.black54, filled: true, textColor: Colors.white),
                   ]),

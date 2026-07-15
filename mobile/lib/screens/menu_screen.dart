@@ -13,6 +13,7 @@ import '../widgets/common.dart';
 import '../widgets/login_sheet.dart';
 import 'earn_coins_screen.dart';
 import 'go_pro_screen.dart';
+import 'my_list_screen.dart';
 import 'wallet_screen.dart';
 import 'whats_new_screen.dart';
 
@@ -42,6 +43,9 @@ class MenuScreen extends StatelessWidget {
         const SizedBox(height: 16),
         _languageRow(context, app),
         const SizedBox(height: 8),
+        _row(context, Icons.bookmark_rounded, 'รายการของฉัน', 'My List',
+            onTap: () => Navigator.of(context)
+                .push(MaterialPageRoute(builder: (_) => const MyListScreen()))),
         if (member.isLoggedIn)
           _row(context, Icons.account_balance_wallet_rounded, 'กระเป๋าเหรียญทอง', 'Gold wallet',
               onTap: () => Navigator.of(context)
