@@ -17,6 +17,7 @@ class CatalogCategory {
     required this.en,
     this.type,
     this.genre,
+    this.scope,
     this.anime = false,
   });
 
@@ -26,18 +27,20 @@ class CatalogCategory {
   final String en;
   final String? type; // media type
   final String? genre; // genre slug
-  final bool anime; // anime/cartoon bucket
+  final String? scope; // main category: 'notanime' keeps anime out of movies/series (matches the web)
+  final bool anime; // anime/cartoon bucket (server maps to scope=anime)
 
   bool get isAll => id == 'all';
   String label(bool isTh) => isTh ? th : en;
 
   static const all = CatalogCategory(id: 'all', th: 'ทั้งหมด', en: 'All');
 
-  /// Fixed chips shown before the server genre list.
+  /// Fixed chips shown before the server genre list. movie/series exclude anime (scope=notanime) so
+  /// they match the web's /movies and /series pages instead of mixing anime in.
   static const base = <CatalogCategory>[
     all,
-    CatalogCategory(id: 'series', th: 'ซีรีส์', en: 'Series', type: 'series'),
-    CatalogCategory(id: 'movie', th: 'ภาพยนตร์', en: 'Movies', type: 'movie'),
+    CatalogCategory(id: 'series', th: 'ซีรีส์', en: 'Series', type: 'series', scope: 'notanime'),
+    CatalogCategory(id: 'movie', th: 'ภาพยนตร์', en: 'Movies', type: 'movie', scope: 'notanime'),
     CatalogCategory(id: 'vertical', th: 'แนวตั้ง', en: 'Vertical', type: 'vertical'),
     CatalogCategory(id: 'anime', th: 'อนิเมะ', en: 'Anime', anime: true),
   ];
@@ -248,7 +251,7 @@ class CatalogState extends ChangeNotifier {
     final next = reset ? 1 : (_pages[key] ?? 0) + 1;
     try {
       final res = await _api.fetchTitlesPage(
-          type: cat.type, genre: cat.genre, anime: cat.anime, per: _perPage, page: next);
+          type: cat.type, genre: cat.genre, scope: cat.scope, anime: cat.anime, per: _perPage, page: next);
       final base = reset ? const <Content>[] : (_items[key] ?? const <Content>[]);
       _items[key] = [...base, ...res.items];
       _pages[key] = next;

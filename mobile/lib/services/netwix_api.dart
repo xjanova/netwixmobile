@@ -87,13 +87,16 @@ class NetwixApi {
 
   /// One page of titles + total + whether more pages exist — for the Explore
   /// grid's infinite scroll. Narrow by media [type] (series|movie|vertical), by
-  /// [genre] slug, or set [anime] for the anime/cartoon bucket.
+  /// [genre] slug, by main-category [scope] (anime|notanime — keeps movies/series
+  /// from bleeding into anime, like the web), or set [anime] for the anime bucket.
+  /// scope + genre combine server-side.
   Future<PagedContent> fetchTitlesPage(
-      {String? type, String? genre, bool anime = false, int page = 1, int per = 30}) async {
+      {String? type, String? genre, String? scope, bool anime = false, int page = 1, int per = 30}) async {
     try {
       final d = _data(await _dio.get('/titles', queryParameters: {
         'type': ?type,
         'genre': ?genre,
+        'scope': ?scope,
         if (anime) 'anime': 1,
         'page': page,
         'per': per,
