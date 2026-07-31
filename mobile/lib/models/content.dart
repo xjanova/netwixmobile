@@ -11,7 +11,6 @@ class Content {
     this.year,
     this.maturity = '',
     this.rating = 0,
-    this.matchScore = 0,
     this.isOriginal = false,
     this.isFeatured = false,
     this.posterUrl = '',
@@ -38,8 +37,16 @@ class Content {
   final String synopsis;
   final int? year;
   final String maturity;
-  final double rating; // editorial 0-10
-  final int matchScore; // % ตรงใจ
+  /// Average of real member star ratings, 1-5, or 0 when nobody has rated it.
+  ///
+  /// This used to be an "editorial 0-10" score, but the backend was generating it with
+  /// random_int() at import — every title carried an invented rating. The API now sends
+  /// the true average from the ratings table (null when unrated, which lands here as 0),
+  /// so `rating > 0` genuinely means "members have rated this".
+  ///
+  /// `matchScore` ("% ตรงใจ") is gone with it: same random_int() origin, the API sends
+  /// null for good now, and nothing in the app ever rendered it.
+  final double rating;
   final bool isOriginal;
   final bool isFeatured;
   final String posterUrl;
@@ -100,7 +107,6 @@ class Content {
         year: (j['year'] as num?)?.toInt(),
         maturity: (j['maturity'] as String?) ?? '',
         rating: (j['rating'] as num?)?.toDouble() ?? 0,
-        matchScore: (j['match_score'] as num?)?.toInt() ?? 0,
         isOriginal: j['is_original'] == true,
         isFeatured: j['is_featured'] == true,
         posterUrl: (j['poster_url'] as String?) ?? '',

@@ -113,6 +113,11 @@ class CatalogState extends ChangeNotifier {
   }
 
   /// "ดาวเยอะ" — highest-rated titles (rated ones only, then popularity).
+  ///
+  /// `rating > 0` now filters on REAL member stars. It used to be a no-op: the backend
+  /// gave every imported title a random 7.8-9.6 score, so this rail was just the whole
+  /// catalogue in random order. Expect it to be short until members rate things — the
+  /// home screen already hides the rail while it is empty.
   List<Content> get topRated {
     final all = (_items['all'] ?? const <Content>[]).where((c) => c.rating > 0).toList()
       ..sort((a, b) {
