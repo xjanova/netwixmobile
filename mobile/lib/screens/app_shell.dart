@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/l10n.dart';
+import '../services/app_navigation.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../theme/hex.dart';
@@ -31,9 +34,37 @@ class _AppShellState extends State<AppShell> {
     });
   }
 
+  /// Back on a non-Home tab returns to Home; back on Home leaves the app WITHOUT closing it.
+  ///
+  /// The default would be SystemNavigator.pop() → the Activity finishes → Android discards the
+  /// task, so re-opening cold-starts at the intro screen and the viewer loses their place. Handing
+  /// the press to moveTaskToBack backgrounds the app exactly like the Home button, so it resumes
+  /// where it was.
+  Future<void> _onBack(bool didPop, Object? _) async {
+    if (didPop) return;
+    if (_index != 0) {
+      setState(() => _index = 0);
+
+      return;
+    }
+    // If the platform hook is unavailable (iOS, or an install predating the channel), fall back to
+    // the framework's own behaviour rather than trapping the user on the screen.
+    if (!await AppNavigation.moveTaskToBack() && mounted) {
+      await SystemNavigator.pop();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = context.watch<AppState>().l;
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: _onBack,
+      child: _buildShell(context, l),
+    );
+  }
+
+  Widget _buildShell(BuildContext context, L10n l) {
     return Scaffold(
       body: DecoratedBox(
         decoration: T.screenBackground,
