@@ -5,6 +5,7 @@ import '../models/ad.dart';
 import '../models/content.dart';
 import '../models/notice.dart';
 import '../models/episode.dart';
+import '../models/legal.dart';
 import '../models/member.dart';
 import '../models/mission.dart';
 import '../models/profile.dart';
@@ -138,6 +139,22 @@ class NetwixApi {
     } catch (e) {
       if (kDebugMode) debugPrint('netwix fetchGenres: $e');
       return const [];
+    }
+  }
+
+  /// Legal text as structured blocks, so the screen renders it with the app's own typography.
+  ///
+  /// Deliberately NOT a WebView on netwix.online/terms: that page ships the whole site, and its
+  /// footer alone links to /movies, /series, /anime, every genre, /login and /register. The WebView
+  /// followed those, dropping the viewer into the website with none of the app's navigation.
+  Future<LegalDoc?> fetchLegal(String doc) async {
+    try {
+      final d = _data(await _dio.get('/legal/$doc', options: _opts));
+      if (d == null) return null;
+      return LegalDoc.fromJson(d.cast<String, dynamic>());
+    } catch (e) {
+      if (kDebugMode) debugPrint('netwix fetchLegal: $e');
+      return null;
     }
   }
 
