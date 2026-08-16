@@ -5,6 +5,8 @@ import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../theme/hex.dart' show Floating;
 import '../theme/tokens.dart';
+import '../widgets/ambient_backdrop.dart';
+import '../widgets/netwix_wordmark.dart';
 import '../widgets/common.dart';
 import '../widgets/login_sheet.dart';
 import 'app_shell.dart';
@@ -19,8 +21,11 @@ class OnboardingScreen extends StatelessWidget {
     final l = app.l;
 
     return Scaffold(
-      body: DecoratedBox(
-        decoration: T.screenBackground,
+      body: AmbientBackdrop(
+        asset: 'assets/art/onboarding-bg.webp',
+        // Light scrim only: this is the pitch screen, so the atmosphere is the point — the text
+        // below it sits over the artwork's naturally dark lower half.
+        scrim: 0.28,
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
@@ -37,11 +42,7 @@ class OnboardingScreen extends StatelessWidget {
                         radius: 0.9,
                       ),
                     ),
-                    child: Image.asset(
-                      'assets/brand/netwix-wordmark.png',
-                      height: 62,
-                      fit: BoxFit.contain,
-                    ),
+                    child: const NetwixWordmark(height: 54),
                   ),
                 ),
                 const Spacer(),

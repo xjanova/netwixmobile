@@ -378,7 +378,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
               ),
             )
           else
-            PosterImage(url: c.heroImageUrl, seed: c.id, radius: 0),
+            PosterImage(url: c.heroImageUrl, seed: c.id, radius: 0, title: c.title),
 
           // bottom fade into the app background + top scrim
           const DecoratedBox(
@@ -421,7 +421,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                 ],
               ),
               clipBehavior: Clip.antiAlias,
-              child: PosterImage(url: c.displayImageUrl, seed: c.id, radius: 12),
+              child: PosterImage(url: c.displayImageUrl, seed: c.id, radius: 12, title: c.title),
             ),
           ),
 

@@ -12,6 +12,7 @@ import '../state/member_state.dart';
 import '../theme/app_theme.dart';
 import '../theme/hex.dart';
 import '../theme/tokens.dart';
+import '../widgets/ambient_backdrop.dart';
 import '../widgets/common.dart';
 import '../widgets/referral_promo_card.dart';
 import 'mission_watch_screen.dart';
@@ -55,8 +56,13 @@ class _EarnCoinsScreenState extends State<EarnCoinsScreen> {
         automaticallyImplyLeading: !embedded,
         title: Text(l.bi('หาเหรียญ', 'Earn coins'), style: AppTheme.display(18, weight: FontWeight.w700)),
       ),
-      body: DecoratedBox(
-        decoration: T.screenBackground,
+      body: AmbientBackdrop(
+        asset: 'assets/art/rewards-bg.webp',
+        alignment: Alignment.bottomCenter,
+        // Heavier scrim than onboarding: this screen is a dense list of cards and numbers, so the
+        // art has to stay atmosphere and never become texture behind text.
+        scrim: 0.62,
+        opacity: 0.85,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
           children: [

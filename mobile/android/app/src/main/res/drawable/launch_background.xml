@@ -1,12 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Modify this file to customize your launch splash screen -->
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@android:color/white" />
+<!--
+  Cold-start window background, shown by the OS before Flutter draws its first frame.
 
-    <!-- You can insert your own image assets here -->
-    <!-- <item>
+  This was Flutter's stock white. On an app whose every screen is near-black that meant a
+  full-screen white flash on every cold start — the most visible rough edge in the product, and
+  the kind of thing that reads as "unfinished" before a single pixel of the real UI appears.
+
+  Brand ink plus the mark, so the launch reads as a deliberate splash instead of a gap.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/ic_launcher_background" />
+    <item>
         <bitmap
             android:gravity="center"
-            android:src="@mipmap/launch_image" />
-    </item> -->
+            android:src="@drawable/ic_launcher_foreground" />
+    </item>
 </layer-list>

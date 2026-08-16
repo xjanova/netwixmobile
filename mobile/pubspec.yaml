@@ -99,6 +99,7 @@ flutter:
   uses-material-design: true
 
   assets:
+    - assets/art/
     - assets/brand/
     - assets/video/
 

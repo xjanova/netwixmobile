@@ -317,7 +317,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    PosterImage(url: it.content.heroImageUrl, seed: it.content.id, radius: 0),
+                    PosterImage(url: it.content.heroImageUrl, seed: it.content.id, radius: 0, title: it.content.title),
                     const DecoratedBox(
                       decoration: BoxDecoration(
                         gradient: LinearGradient(

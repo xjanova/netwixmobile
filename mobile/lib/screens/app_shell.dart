@@ -111,8 +111,18 @@ class _BottomNav extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: const BoxDecoration(
-        color: Color(0xEB0E0B07),
-        border: Border(top: BorderSide(color: T.hairline)),
+        // Was a flat warm-dark fill (0E0B07) on a cool near-black theme — subtly off-brand and
+        // completely flat. A short vertical gradient plus a lifted top hairline reads as a bar
+        // sitting ABOVE the content rather than a strip painted onto it.
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xF21A1428), Color(0xFA0B0712)],
+        ),
+        border: Border(top: BorderSide(color: T.hairlineStrong)),
+        boxShadow: [
+          BoxShadow(color: Color(0x8C000000), blurRadius: 16, offset: Offset(0, -4)),
+        ],
       ),
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewPadding.bottom),
       height: 66 + MediaQuery.of(context).viewPadding.bottom,
@@ -131,25 +141,67 @@ class _BottomNav extends StatelessWidget {
   }
 
   Widget _navTile(_NavItem item, bool active) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        HexBox(
-          size: 24,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: active ? T.accent.withValues(alpha: 0.18) : Colors.transparent,
-            ),
-            child: Icon(item.icon, size: 15, color: active ? T.accent : const Color(0xFF5A5346)),
+    // Animated so switching tabs has a beat to it. Nothing here moved before — the icon simply
+    // swapped colour, which is the flattest possible way to show state.
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              // Accent bloom behind the active tab — the depth cue that tells you which tab you
+              // are on from the corner of your eye, without adding another line to the bar.
+              AnimatedOpacity(
+                opacity: active ? 1 : 0,
+                duration: const Duration(milliseconds: 240),
+                child: Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      colors: [T.accent.withValues(alpha: 0.34), Colors.transparent],
+                    ),
+                  ),
+                ),
+              ),
+              HexBox(
+                size: 24,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: active ? T.accent.withValues(alpha: 0.22) : Colors.transparent,
+                  ),
+                  child: Icon(item.icon,
+                      size: 15, color: active ? T.accent : const Color(0xFF6B6280)),
+                ),
+              ),
+            ],
           ),
-        ),
-        const SizedBox(height: 5),
-        Text(
-          item.label,
-          style: AppTheme.body(9,
-              weight: FontWeight.w600, color: active ? T.textPrimary : T.textInactive),
-        ),
-      ],
+          const SizedBox(height: 4),
+          AnimatedDefaultTextStyle(
+            duration: const Duration(milliseconds: 220),
+            style: AppTheme.body(9,
+                weight: active ? FontWeight.w700 : FontWeight.w600,
+                color: active ? T.textPrimary : T.textInactive),
+            child: Text(item.label),
+          ),
+          const SizedBox(height: 3),
+          // A short accent underline anchors the active tab to the bar's top edge.
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 240),
+            curve: Curves.easeOut,
+            height: 2,
+            width: active ? 16 : 0,
+            decoration: BoxDecoration(
+              color: T.accent,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

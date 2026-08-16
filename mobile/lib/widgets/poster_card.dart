@@ -6,6 +6,7 @@ import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import 'common.dart';
 import 'poster_image.dart';
+import 'pressable.dart';
 
 void openContent(BuildContext context, Content c) {
   Navigator.of(context).push(MaterialPageRoute(builder: (_) => SeriesDetailScreen(content: c)));
@@ -40,7 +41,7 @@ class PortraitPosterCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return Pressable(
       onTap: () => openContent(context, content),
       child: SizedBox(
         width: width,
@@ -49,10 +50,27 @@ class PortraitPosterCard extends StatelessWidget {
           children: [
             AspectRatio(
               aspectRatio: 2 / 3,
-              child: Stack(
+              child: DecoratedBox(
+                // Two shadows, not one: a tight dark contact shadow anchors the card to the
+                // background, a wide soft one gives it height. A single mid shadow is what makes
+                // dark UIs look like flat stickers on a flat sheet.
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(T.rMedia),
+                  boxShadow: const [
+                    BoxShadow(color: Color(0x99000000), blurRadius: 6, offset: Offset(0, 2)),
+                    BoxShadow(color: Color(0x4D000000), blurRadius: 18, offset: Offset(0, 9)),
+                  ],
+                ),
+                child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  PosterImage(url: content.displayImageUrl, seed: content.id),
+                  PosterImage(url: content.displayImageUrl, seed: content.id, title: content.title),
+                  // Grounding scrim: the bottom pills sat on raw artwork and could land on a pale
+                  // frame, and the fade also stops the poster ending in a hard edge.
+                  const _PosterScrim(),
+                  // Rim light — brighter along the top edge, as if lit from above. This is the cue
+                  // that separates one card from the next in a dense grid.
+                  _RimLight(radius: T.rMedia),
                   Positioned(
                     left: 6,
                     top: 6,
@@ -70,6 +88,7 @@ class PortraitPosterCard extends StatelessWidget {
                       child: Pill(text: '${content.viewsText} 👁', color: Colors.black54, filled: true, textColor: Colors.white),
                     ),
                 ],
+                ),
               ),
             ),
             const SizedBox(height: 7),
@@ -102,7 +121,7 @@ class FeaturedCard extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            PosterImage(url: content.heroImageUrl, seed: content.id + 1),
+            PosterImage(url: content.heroImageUrl, seed: content.id + 1, title: content.title),
             // left-dark gradient overlay
             DecoratedBox(
               decoration: BoxDecoration(
@@ -163,4 +182,73 @@ class FeaturedCard extends StatelessWidget {
       ),
     );
   }
+}
+
+
+/// Bottom-to-top darkening over a poster, so overlaid pills stay legible on any artwork.
+class _PosterScrim extends StatelessWidget {
+  const _PosterScrim();
+
+  @override
+  Widget build(BuildContext context) => const DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.bottomCenter,
+            end: Alignment.topCenter,
+            colors: [Color(0xB3000000), Color(0x2E000000), Colors.transparent],
+            stops: [0.0, 0.28, 0.55],
+          ),
+        ),
+      );
+}
+
+/// Hairline edge that catches light at the top and fades by the bottom — a cheap, convincing
+/// bevel. Drawn as a border rather than a stroke so it never costs a saveLayer while scrolling.
+class _RimLight extends StatelessWidget {
+  const _RimLight({required this.radius});
+
+  final double radius;
+
+  @override
+  Widget build(BuildContext context) => IgnorePointer(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(radius),
+            border: const GradientBoxBorder(),
+          ),
+        ),
+      );
+}
+
+/// A 1px border whose colour fades top→bottom.
+class GradientBoxBorder extends BoxBorder {
+  const GradientBoxBorder();
+
+  @override
+  BorderSide get top => BorderSide.none;
+  @override
+  BorderSide get bottom => BorderSide.none;
+  @override
+  EdgeInsetsGeometry get dimensions => EdgeInsets.zero;
+  @override
+  bool get isUniform => false;
+
+  @override
+  void paint(Canvas canvas, Rect rect,
+      {TextDirection? textDirection, BoxShape shape = BoxShape.rectangle, BorderRadius? borderRadius}) {
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1
+      ..shader = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [Color(0x2EFFFFFF), Color(0x0AFFFFFF), Color(0x00FFFFFF)],
+        stops: [0.0, 0.4, 1.0],
+      ).createShader(rect);
+    final rrect = (borderRadius ?? BorderRadius.zero).toRRect(rect).deflate(0.5);
+    canvas.drawRRect(rrect, paint);
+  }
+
+  @override
+  ShapeBorder scale(double t) => this;
 }

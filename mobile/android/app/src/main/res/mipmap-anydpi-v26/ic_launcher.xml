@@ -1,9 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Adaptive launcher icon.
+
+  The foreground is generated at each density by tool/brand/make_icons.py with the mark already
+  sized to the 66% safe circle, so it needs NO inset here — the old 16% inset was compensating for
+  artwork that filled its canvas edge to edge, and it left the mark looking shrunken on square
+  launchers while still risking a trim on round ones.
+
+  <monochrome> is what Android 13+ tints for themed icons. Without it the launcher derives its own
+  silhouette from the foreground, which for a mark with a cut-out centre comes out as a solid blob.
+-->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-  <background android:drawable="@color/ic_launcher_background"/>
-  <foreground>
-      <inset
-          android:drawable="@drawable/ic_launcher_foreground"
-          android:inset="16%" />
-  </foreground>
+    <background android:drawable="@color/ic_launcher_background" />
+    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+    <monochrome android:drawable="@drawable/ic_launcher_monochrome" />
 </adaptive-icon>

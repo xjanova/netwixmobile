@@ -23,6 +23,7 @@ import '../widgets/unlock_sheet.dart';
 import 'go_pro_screen.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
+import '../widgets/netwix_wordmark.dart';
 import '../widgets/poster_image.dart';
 
 /// 08 — Playback · เล่นซีรีส์.
@@ -1059,14 +1060,7 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
   /// `partials/player-watermark`. Bigger over vertical clips (which fill the
   /// frame) so it still reads as ours. Never intercepts taps.
   Widget _watermark() => IgnorePointer(
-        child: Opacity(
-          opacity: 0.9,
-          child: Image.asset(
-            'assets/brand/netwix-wordmark.png',
-            height: c.isVertical ? 30 : 22,
-            filterQuality: FilterQuality.medium,
-          ),
-        ),
+        child: NetwixWordmark(height: c.isVertical ? 26 : 19, opacity: 0.82),
       );
 }
 
