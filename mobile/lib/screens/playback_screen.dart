@@ -179,8 +179,12 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
     await _ensure(index);
     if (index == _current) {
       final ctrl = _controllers[index];
+      // removeListener first: _ensure() has already attached _onTick when the episode it built is
+      // the current one, and ChangeNotifier does not dedupe — without this, every unlock leaves the
+      // player ticking (and rebuilding) one extra time per frame for the rest of the session.
       ctrl
-        ?..addListener(_onTick)
+        ?..removeListener(_onTick)
+        ..addListener(_onTick)
         ..play();
     }
   }
@@ -252,7 +256,8 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
     await _ensure(index);
     if (mounted && index == _current) {
       _controllers[index]
-        ?..addListener(_onTick)
+        ?..removeListener(_onTick)   // see _unlockAt — _ensure may already have attached it
+        ..addListener(_onTick)
         ..play();
     }
   }
