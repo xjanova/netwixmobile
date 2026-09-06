@@ -27,7 +27,22 @@ class NetwixApi {
               connectTimeout: const Duration(seconds: 15),
               receiveTimeout: const Duration(seconds: 20),
               headers: {'Accept': 'application/json'},
-            ));
+            )) {
+    // A 401 on a request that DID carry a token means the server has stopped honouring it —
+    // revoked, expired, or the account suspended. Every call here answers a failure with null, so
+    // without this the app cannot tell "the server rejected you" from "you are on a train": it kept
+    // showing a signed-in member whose every member call silently failed, forever.
+    _dio.interceptors.add(InterceptorsWrapper(
+      onResponse: (r, h) {
+        if (r.statusCode == 401) _rejected();
+        h.next(r);
+      },
+      onError: (e, h) {
+        if (e.response?.statusCode == 401) _rejected();
+        h.next(e);
+      },
+    ));
+  }
 
   static const String origin = 'https://netwix.online';
   static const String baseUrl = '$origin/api/app';
@@ -50,8 +65,20 @@ class NetwixApi {
   final Dio _dio;
   String? _token;
 
+  /// Fired once when the server rejects the token we sent, so the app can sign out locally instead
+  /// of pretending. Set by [MemberState]; null for a guest client or in tests.
+  void Function()? onTokenRejected;
+
   /// Set/clear the member token (Phase 3). Sent as Bearer on every request.
   void setToken(String? token) => _token = token;
+
+  /// One sign-out per rejected token, not one per in-flight request: a screen that fires three
+  /// member calls at once would otherwise trip the callback three times.
+  void _rejected() {
+    if (_token == null) return; // a 401 on a guest call is just a guest call
+    _token = null;
+    onTokenRejected?.call();
+  }
 
   Options get _opts => Options(headers: {
         if (_token != null) 'Authorization': 'Bearer $_token',
@@ -316,10 +343,11 @@ class NetwixApi {
 
   /// Exchange the one-time login code (from the netwix:// deep link) for a
   /// bearer token. Returns `{token, user}` or null.
-  Future<Map<String, dynamic>?> exchangeCode(String code, {String device = 'android'}) async {
+  Future<Map<String, dynamic>?> exchangeCode(String code,
+      {String device = 'android', String? verifier}) async {
     try {
       final r = await _dio.post('/auth/exchange',
-          data: {'code': code, 'device': device},
+          data: {'code': code, 'device': device, 'verifier': ?verifier},
           options: Options(validateStatus: (s) => s != null && s < 500));
       return _data(r);
     } catch (e) {

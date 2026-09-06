@@ -77,6 +77,10 @@ class MemberState extends ChangeNotifier {
   String get shareLink => _referral?.link ?? NetwixApi.referralUrl(referralCode);
 
   void init() {
+    // The server has the last word on whether this device is still signed in. Without this the app
+    // trusted its own cache forever: a revoked token (logout elsewhere, suspended account) left the
+    // member looking signed in while every member call quietly failed.
+    _api.onTokenRejected = _onTokenRejected;
     _member = _store.member;
     _coins = _store.coins;
     final token = _member?.token;
@@ -193,6 +197,18 @@ class MemberState extends ChangeNotifier {
     await _store.setCoins(0);
     notifyListeners();
     return true;
+  }
+
+  /// The server refused our token. Drop the session locally — but do NOT call the revoke endpoint
+  /// (the token is already dead) and keep everything a guest is allowed to have.
+  void _onTokenRejected() {
+    if (_member == null) return;
+    _member = null;
+    _referral = null;
+    _missions = const [];
+    _gold = 0;
+    unawaited(_store.setMember(null));
+    notifyListeners();
   }
 
   Future<void> logout() async {

@@ -93,6 +93,20 @@ class Member {
     }
   }
 
+  /// This member WITHOUT the bearer token — what goes into SharedPreferences, which is a plaintext
+  /// XML file on disk. The token itself lives in the platform keystore; see [AccountStore].
+  /// (copyWith cannot express this: its `token ?? this.token` can never clear a field.)
+  Member withoutToken() => Member(
+        id: id,
+        name: name,
+        avatar: avatar,
+        email: email,
+        provider: provider,
+        referralCode: referralCode,
+        isPro: isPro,
+        proUntil: proUntil,
+      );
+
   Member copyWith(
           {String? name,
           String? avatar,

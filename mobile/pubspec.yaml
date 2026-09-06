@@ -37,7 +37,12 @@ dependencies:
   # Grapheme-safe string handling — a Thai cluster or emoji must not be split by
   # taking [0] when deriving a comment avatar's initial.
   characters: ^1.4.0
+  # SHA-256 for the PKCE challenge that binds a sign-in code to this install. Pure Dart, no plugin.
+  crypto: ^3.0.6
   dio: ^5.10.0
+  # The bearer token is the account. It belongs in the platform keystore, not in the plaintext
+  # SharedPreferences file every backup, adb pull and file manager can reach.
+  flutter_secure_storage: ^10.0.0
   provider: ^6.1.5+1
   video_player: ^2.11.1
   cached_network_image: ^3.4.1

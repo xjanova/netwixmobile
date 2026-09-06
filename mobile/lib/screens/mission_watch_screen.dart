@@ -8,6 +8,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 import '../models/mission.dart';
 import '../services/netwix_api.dart';
+import '../services/webview_guard.dart';
 import '../state/app_state.dart';
 import '../state/member_state.dart';
 import '../theme/app_theme.dart';
@@ -152,6 +153,7 @@ function onYouTubeIframeAPIReady(){
 
     final web = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setNavigationDelegate(playerOnlyNavigation())
       ..setBackgroundColor(Colors.black)
       ..addJavaScriptChannel('State', onMessageReceived: (msg) {
         final playing = msg.message == '1';

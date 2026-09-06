@@ -8,6 +8,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 import '../l10n/l10n.dart';
 import '../models/ad.dart';
+import '../services/webview_guard.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 
@@ -69,6 +70,7 @@ class _PrerollAdOverlayState extends State<PrerollAdOverlay> {
     if (ad.isYoutube) {
       _web = WebViewController()
         ..setJavaScriptMode(JavaScriptMode.unrestricted)
+        ..setNavigationDelegate(playerOnlyNavigation())
         ..setBackgroundColor(Colors.black)
         ..loadHtmlString(_youtubeHtml(ad.youtube!));
       if (mounted) setState(() {});

@@ -1,5 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:math';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 
@@ -40,10 +43,25 @@ class AuthService {
 
   static const String _callbackScheme = 'netwix';
 
+  /// PKCE. The login code comes back over `netwix://`, a scheme ANY installed app may also
+  /// register — and Android will let one of them take the redirect. One-time use is no defence when
+  /// the thief redeems first. So the exchange is bound to a secret that never leaves this process:
+  /// only its SHA-256 goes out with the sign-in, and a stolen code is worth nothing without it.
+  static (String verifier, String challenge) _pkce() {
+    final rnd = Random.secure();
+    final verifier =
+        base64Url.encode(List<int>.generate(32, (_) => rnd.nextInt(256))).replaceAll('=', '');
+    final challenge =
+        base64Url.encode(sha256.convert(utf8.encode(verifier)).bytes).replaceAll('=', '');
+    return (verifier, challenge);
+  }
+
   Future<AuthResult> signIn(AuthProvider provider) async {
     final q = provider.query;
     final p = q ?? 'email';
-    final url = '${NetwixApi.origin}/mauth/start${q != null ? '?provider=$q' : ''}';
+    final (verifier, challenge) = _pkce();
+    final url = '${NetwixApi.origin}/mauth/start'
+        '?cc=$challenge${q != null ? '&provider=$q' : ''}';
 
     // Diagnostics carry only the provider + step + error text — never the
     // one-time code or the bearer token.
@@ -74,7 +92,7 @@ class AuthService {
     }
     unawaited(debugReport('auth.callback', context: {'provider': p, 'has_code': true}));
 
-    final data = await _api.exchangeCode(code);
+    final data = await _api.exchangeCode(code, verifier: verifier);
     final token = data?['token'] as String?;
     final user = data?['user'];
     if (token == null || user is! Map) {
