@@ -10,6 +10,7 @@ import '../l10n/l10n.dart';
 import '../models/content.dart';
 import '../models/episode.dart';
 import '../services/catalog_db.dart';
+import '../services/debug_reporter.dart';
 import '../services/format.dart';
 import '../services/netwix_api.dart';
 import '../state/app_state.dart';
@@ -327,7 +328,16 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
           return;
         }
       }
-      _errMsg[index] = e.toString();
+      // NOT e.toString(). That string is ExoPlayer/Dio internals ending in the URL it failed on —
+      // our stream proxy, or for a directly-resolved source the upstream CDN itself. A viewer must
+      // never be shown where our video actually comes from (the same leak we closed in the web
+      // manifests), and none of the rest means anything to them either. The raw text goes to the
+      // diagnostics sink, which the admin's debug viewer already reads.
+      _errMsg[index] = 'เล่นตอนนี้ไม่ได้ ลองใหม่อีกครั้ง';
+      unawaited(debugReport('playback.init_fail',
+          level: 'warn',
+          message: e.toString().substring(0, e.toString().length.clamp(0, 500)),
+          context: {'episode': ep.id}));
       _failed.add(index);
       if (mounted) setState(() {});
     }

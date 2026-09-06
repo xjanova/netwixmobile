@@ -6,9 +6,16 @@
     <!-- FCM push notifications (Android 13+ runtime permission) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
+    <!-- allowBackup=false: the member's bearer token is stored in SharedPreferences, and Android
+         Auto Backup would copy that file to the user's Google Drive and onto the next device they
+         restore from. A sideloaded streaming app has nothing worth backing up (settings are
+         trivial, watch progress is on the server) and a session that survives a restore onto a
+         different device is the one thing we do not want. -->
     <application
         android:label="NetWix"
         android:name="${applicationName}"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
         android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"
