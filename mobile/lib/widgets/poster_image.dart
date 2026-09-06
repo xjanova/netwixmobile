@@ -1,13 +1,16 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
+import '../services/cover_healer.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 
 /// Poster/artwork image with a cinematic gradient fallback (used while loading
 /// and when a title has no artwork). NetWix serves public poster/backdrop URLs,
 /// so no auth header is needed.
-class PosterImage extends StatelessWidget {
+class PosterImage extends StatefulWidget {
   const PosterImage({
     super.key,
     required this.url,
@@ -16,7 +19,14 @@ class PosterImage extends StatelessWidget {
     this.radius = T.rMedia,
     this.memCacheWidth = 400,
     this.title,
+    this.healContentId,
   });
+
+  /// Title this artwork belongs to, when [url] is the TITLE's own poster/backdrop. Set it and the
+  /// card reports a cover that doesn't load (or was never there) so the server can re-fetch it —
+  /// see [CoverHealer]. Leave it null for artwork that isn't the title's own (an episode still, an
+  /// avatar): healing the title would be the wrong repair for the wrong image.
+  final int? healContentId;
 
   final String url;
 
@@ -79,22 +89,72 @@ class PosterImage extends StatelessWidget {
   }
 
   @override
+  State<PosterImage> createState() => _PosterImageState();
+}
+
+class _PosterImageState extends State<PosterImage> {
+  /// Cover the server handed back after we reported this one broken — shown instead of [widget.url].
+  String? _healed;
+
+  /// One report per card per app run. The [CoverHealer] dedupes per TITLE as well; this stops a
+  /// single card that keeps failing from asking again on every rebuild.
+  bool _asked = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // A title with no artwork at all never fails a load, because no load is ever attempted — the
+    // one case the website's "report it when the <img> errors" rule cannot see. Report it here.
+    if (widget.url.isEmpty) _report();
+  }
+
+  @override
+  void didUpdateWidget(PosterImage old) {
+    super.didUpdateWidget(old);
+    if (old.url != widget.url || old.healContentId != widget.healContentId) {
+      _healed = null;
+      _asked = false;
+      if (widget.url.isEmpty) _report();
+    }
+  }
+
+  /// Tell the server this cover isn't usable, and swap in whatever it recovers.
+  ///
+  /// Deferred to a microtask because the caller is [CachedNetworkImage]'s `errorWidget`, which runs
+  /// *during build* — setState (or an await that ends in one) inside build is the classic Flutter
+  /// crash, and this is the exact shape that hits it.
+  void _report() {
+    final id = widget.healContentId;
+    if (_asked || id == null) return;
+    _asked = true;
+    scheduleMicrotask(() async {
+      final url = await CoverHealer.instance.heal(id);
+      if (!mounted || url == null || url == widget.url) return;
+      setState(() => _healed = url);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final fallback = _Placeholder(seed: seed, title: title);
+    final fallback = _Placeholder(seed: widget.seed, title: widget.title);
+    final url = _healed ?? widget.url;
 
     final Widget img = url.isEmpty
         ? fallback
         : CachedNetworkImage(
-            imageUrl: _safeUrl(url),
-            fit: fit,
-            memCacheWidth: memCacheWidth,
+            imageUrl: PosterImage._safeUrl(url),
+            fit: widget.fit,
+            memCacheWidth: widget.memCacheWidth,
             placeholder: (_, _) => fallback,
-            errorWidget: (_, _, _) => fallback,
+            errorWidget: (_, _, _) {
+              _report();
+              return fallback;
+            },
             fadeInDuration: const Duration(milliseconds: 200),
           );
 
     return ClipRRect(
-      borderRadius: BorderRadius.circular(radius),
+      borderRadius: BorderRadius.circular(widget.radius),
       child: SizedBox.expand(child: img),
     );
   }

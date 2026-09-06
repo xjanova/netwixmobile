@@ -64,7 +64,11 @@ class PortraitPosterCard extends StatelessWidget {
                 child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  PosterImage(url: content.displayImageUrl, seed: content.id, title: content.title),
+                  PosterImage(
+                      url: content.displayImageUrl,
+                      seed: content.id,
+                      title: content.title,
+                      healContentId: content.id),
                   // Grounding scrim: the bottom pills sat on raw artwork and could land on a pale
                   // frame, and the fade also stops the poster ending in a hard edge.
                   const _PosterScrim(),
@@ -121,7 +125,11 @@ class FeaturedCard extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            PosterImage(url: content.heroImageUrl, seed: content.id + 1, title: content.title),
+            PosterImage(
+                url: content.heroImageUrl,
+                seed: content.id + 1,
+                title: content.title,
+                healContentId: content.id),
             // left-dark gradient overlay
             DecoratedBox(
               decoration: BoxDecoration(

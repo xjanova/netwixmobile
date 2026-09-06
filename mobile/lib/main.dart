@@ -11,6 +11,7 @@ import 'services/ad_service.dart';
 import 'services/auth_service.dart';
 import 'services/auto_updater.dart';
 import 'services/catalog_db.dart';
+import 'services/cover_healer.dart';
 import 'services/debug_reporter.dart';
 import 'services/netwix_api.dart';
 import 'services/push_service.dart';
@@ -74,6 +75,8 @@ Future<void> main() async {
   // ads and the episode paywall. Pro now comes from the server only.
   await settings.clearLegacyProFlag();
   final api = NetwixApi();
+  // Broken/missing covers get reported from the cards that fail to show them.
+  CoverHealer.instance.configure(api);
   final db = await CatalogDb.open();
   final accountStore = await AccountStore.load();
   final adFrequency = await AdFrequency.load();

@@ -216,6 +216,37 @@ class NetwixApi {
     }
   }
 
+  // -------------------------------------------------------------- covers
+
+  /// "This episode is playing and it has no cover." The server grabs a frame with ffmpeg (deduped
+  /// per episode, budgeted per hour); the app cannot do it itself, because video_player draws into
+  /// a platform texture and Dart cannot read a texture back. Fire-and-forget — the cover appears on
+  /// a later open, never in this session.
+  Future<void> requestEpisodeCover(int episodeId) async {
+    try {
+      await _dio.post('/episodes/$episodeId/cover',
+          options: Options(headers: _opts.headers, validateStatus: (s) => s != null && s < 500));
+    } catch (e) {
+      if (kDebugMode) debugPrint('netwix requestEpisodeCover($episodeId): $e');
+    }
+  }
+
+  /// "This title's poster did not load." Returns a repaired URL when the server could re-fetch the
+  /// cover, null otherwise (the card keeps its branded fallback). Worth calling even when the answer
+  /// is null: a load that failed on a real device is the only thing that tells a dead hotlink from a
+  /// live one, and it is what puts the title into the admin's missing-covers queue.
+  Future<String?> healCover(int contentId) async {
+    try {
+      final d = _data(await _dio.post('/content/$contentId/heal-cover',
+          options: Options(headers: _opts.headers, validateStatus: (s) => s != null && s < 500)));
+      final url = d?['url'];
+      return url is String && url.isNotEmpty ? url : null;
+    } catch (e) {
+      if (kDebugMode) debugPrint('netwix healCover($contentId): $e');
+      return null;
+    }
+  }
+
   // ---------------------------------------------------- notifications / banners
 
   /// The admin-broadcast notification inbox, newest first. Empty on failure.

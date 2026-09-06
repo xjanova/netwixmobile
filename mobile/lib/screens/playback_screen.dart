@@ -100,6 +100,9 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
   AdFrequency? _adFreq;
   bool _isPro = false;
 
+  /// Episodes whose cover we've already asked the server to make, this session.
+  final Set<int> _coverAsked = {};
+
   DateTime _lastResumeSave = DateTime.fromMillisecondsSinceEpoch(0);
   bool _advancing = false;
   bool _fullscreen = false; // landscape + fit-to-frame (for horizontal titles)
@@ -379,6 +382,7 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
     }
 
     _marks(ctrl);
+    _maybeCover(ctrl);
 
     // autoplay-next → swipe to the next episode. Stays as the FALLBACK for a
     // title with no outro marker (and if the marker somehow never fired);
@@ -476,6 +480,28 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
     if (!_outroFired && outro > 0 && dur > 0 && t > 5 && (dur - t) <= outro) {
       _enterOutro();
     }
+  }
+
+  /// Cover earned from viewing — the app's half of the web player's `nxMaybeThumb`.
+  ///
+  /// Once someone is genuinely watching an episode that has no cover, ask the server to make one.
+  /// The web grabs the frame itself off its <canvas>; here the video lives in a platform texture
+  /// that Dart cannot read back, so we report the moment and the server ffmpegs the frame.
+  ///
+  /// The threshold is the whole trick: a frame from second 0 is a black screen or a distributor
+  /// logo. Short verticals capture earlier so a one-minute drama still ends up with a cover.
+  void _maybeCover(VideoPlayerController ctrl) {
+    final ep = eps[_current];
+    if ((ep.thumbnailUrl ?? '').isNotEmpty || _coverAsked.contains(ep.id)) return;
+    if (!ctrl.value.isPlaying) return;
+
+    final dur = ctrl.value.duration.inSeconds;
+    final short = (dur * 0.2).round();
+    final threshold = (dur > 0 && dur < 120) ? (short < 8 ? 8 : short) : 40;
+    if (ctrl.value.position.inSeconds < threshold) return;
+
+    _coverAsked.add(ep.id);
+    unawaited(_api?.requestEpisodeCover(ep.id) ?? Future<void>.value());
   }
 
   void _skipIntro() {
@@ -665,6 +691,7 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
                               url: ep.thumbnailUrl ?? c.displayImageUrl,
                               seed: c.id + ep.number,
                               radius: 10,
+                              healContentId: ep.thumbnailUrl == null ? c.id : null,
                             ),
                             // Scrim so the label stays readable over any artwork.
                             const DecoratedBox(

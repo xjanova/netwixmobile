@@ -378,7 +378,8 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
               ),
             )
           else
-            PosterImage(url: c.heroImageUrl, seed: c.id, radius: 0, title: c.title),
+            PosterImage(
+                url: c.heroImageUrl, seed: c.id, radius: 0, title: c.title, healContentId: c.id),
 
           // bottom fade into the app background + top scrim
           const DecoratedBox(
@@ -421,7 +422,12 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                 ],
               ),
               clipBehavior: Clip.antiAlias,
-              child: PosterImage(url: c.displayImageUrl, seed: c.id, radius: 12, title: c.title),
+              child: PosterImage(
+                  url: c.displayImageUrl,
+                  seed: c.id,
+                  radius: 12,
+                  title: c.title,
+                  healContentId: c.id),
             ),
           ),
 
@@ -599,7 +605,12 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                     fit: StackFit.expand,
                     children: [
                       PosterImage(
-                          url: ep.thumbnailUrl ?? c.displayImageUrl, seed: c.id + ep.number, radius: 8),
+                          url: ep.thumbnailUrl ?? c.displayImageUrl,
+                          seed: c.id + ep.number,
+                          radius: 8,
+                          // Only when this tile is showing the TITLE's poster — if the episode has
+                          // a still of its own, a failure there is not the title's cover failing.
+                          healContentId: ep.thumbnailUrl == null ? c.id : null),
                       Center(
                         child: Icon(unlocked && !ep.isUnavailable ? Icons.play_arrow_rounded : Icons.lock_rounded,
                             size: 18, color: Colors.white70),
