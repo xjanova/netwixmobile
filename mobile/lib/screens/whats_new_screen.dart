@@ -9,8 +9,9 @@ import '../theme/tokens.dart';
 import '../widgets/common.dart';
 import '../widgets/update_sheet.dart';
 
-/// 06 — What's New / Update · อัปเดต. Shows the running version and a manual
-/// "check for updates" that reuses the in-app OTA update flow (via netwix.online).
+/// 06 — Update · อัปเดตแอป. Shows the running version and a manual "check for
+/// updates" that reuses the in-app OTA update flow (via netwix.online). Lists no
+/// changes — customers aren't told what a release contains (owner's call).
 class WhatsNewScreen extends StatefulWidget {
   const WhatsNewScreen({super.key});
 
@@ -39,16 +40,11 @@ class _WhatsNewScreenState extends State<WhatsNewScreen> {
   @override
   Widget build(BuildContext context) {
     final l = context.watch<AppState>().l;
-    final changes = [
-      l.bi('สตรีมมิ่งเต็มรูปแบบ ดูฟรีทุกเรื่อง', 'Full streaming, everything free'),
-      l.bi('Pro 129฿ รับชมแบบไม่มีโฆษณา', 'Pro 129฿ for ad-free viewing'),
-      l.bi('อัปเดตในแอปอัตโนมัติ', 'Automatic in-app updates'),
-    ];
 
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.transparent,
-        title: Text(l.bi('มีอะไรใหม่', "What's New"), style: AppTheme.display(18, weight: FontWeight.w700)),
+        title: Text(l.bi('อัปเดตแอป', 'App update'), style: AppTheme.display(18, weight: FontWeight.w700)),
       ),
       body: DecoratedBox(
         decoration: T.screenBackground,
@@ -58,23 +54,7 @@ class _WhatsNewScreenState extends State<WhatsNewScreen> {
             Center(child: Floating(child: const GemCrest(size: 76, icon: Icons.auto_awesome_rounded))),
             const SizedBox(height: 18),
             Center(child: Pill(text: _version.isEmpty ? '…' : _version)),
-            const SizedBox(height: 22),
-            for (final c in changes)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 14),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Padding(
-                      padding: EdgeInsets.only(top: 2),
-                      child: HexBox(size: 16, child: DecoratedBox(decoration: BoxDecoration(gradient: T.accentGradient))),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(child: Text(c, style: AppTheme.body(14, color: T.textSecondary))),
-                  ],
-                ),
-              ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 34),
             _checking
                 ? const Center(child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(color: T.accent)))
                 : AccentButton(

@@ -1,7 +1,11 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:ota_update/ota_update.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'netwix_api.dart';
 import 'update_info.dart';
@@ -78,7 +82,7 @@ class AutoUpdater {
       final parsed = ReleaseVersion.parse(tag);
       final latestVersion = parsed.parts.join('.');
       final latestBuild = parsed.build;
-      final notes = _sanitizeNotes((data['notes'] as String?) ?? '');
+      // `notes` is ignored on purpose — release details are never shown to customers.
       final apkSize = (data['size'] as num?)?.toInt() ?? 0;
 
       final available =
@@ -91,7 +95,6 @@ class AutoUpdater {
         latestVersion: latestVersion,
         latestBuild: latestBuild,
         tag: tag,
-        notes: notes,
         // Always our own domain — see [apkDownloadUrl].
         apkUrl: available ? apkDownloadUrl : null,
         apkSizeBytes: apkSize,
@@ -104,57 +107,131 @@ class AutoUpdater {
     }
   }
 
-  /// Downloads and installs the APK, streaming coarse-grained progress.
+  /// Downloads and installs the APK, streaming progress.
+  ///
+  /// `ota_update` only reports download progress when the response carries
+  /// `Content-Length`, and Cloudflare strips it from `/download/apk` — so the bar
+  /// sat at 0% for the whole download. We therefore also watch the file the plugin
+  /// is writing and divide by the manifest's exact APK size ([downloadPercent]).
+  /// When the plugin does report a percent, it wins and the polling stops.
   ///
   /// Status handling is intentionally forgiving: we categorise by the enum's
   /// *name* (contains "ERROR"/"DONE") so a future plugin version that adds a new
   /// [OtaStatus] can't break the compile or silently mis-route (Juntra lesson).
-  Stream<UpdateProgress> downloadAndInstall(UpdateInfo info) async* {
+  Stream<UpdateProgress> downloadAndInstall(UpdateInfo info) {
     final url = info.apkUrl;
     if (url == null) {
-      yield const UpdateProgress(UpdatePhase.error, error: 'ไม่พบไฟล์ติดตั้ง (APK)');
-      return;
+      return Stream.value(
+          const UpdateProgress(UpdatePhase.error, error: 'ไม่พบไฟล์ติดตั้ง (APK)'));
     }
 
-    try {
-      final stream = OtaUpdate().execute(
-        url,
-        destinationFilename: 'netwix-${info.latestVersion}.apk',
-        usePackageInstaller: true,
-      );
+    final filename = 'netwix-${info.latestVersion}.apk';
+    late final StreamController<UpdateProgress> out;
+    StreamSubscription<OtaEvent>? ota;
+    Timer? poll;
+    // Set when the sheet stops listening. `out.isClosed` would NOT flip on a cancel,
+    // so start() checks this after its awaits — or it would still arm the timer.
+    var cancelled = false;
 
-      await for (final event in stream) {
-        final name = event.status.name; // e.g. "DOWNLOADING"
-        if (name == 'DOWNLOADING') {
-          yield UpdateProgress(UpdatePhase.downloading,
-              percent: int.tryParse(event.value ?? ''));
-        } else if (name == 'INSTALLING') {
-          yield const UpdateProgress(UpdatePhase.installing);
-        } else if (name.contains('DONE')) {
-          yield const UpdateProgress(UpdatePhase.done);
-        } else if (name.contains('ERROR') || name == 'CANCELED') {
-          yield UpdateProgress(UpdatePhase.error, error: _friendlyError(name, event.value));
-        }
+    void emit(UpdateProgress p) {
+      if (!cancelled && !out.isClosed) out.add(p);
+    }
+
+    void stopPolling() {
+      poll?.cancel();
+      poll = null;
+    }
+
+    void fail(String error) {
+      stopPolling();
+      emit(UpdateProgress(UpdatePhase.error, error: error));
+    }
+
+    Future<void> start() async {
+      // ota_update writes to <dataDir>/files/ota_update/<filename>; on Android that
+      // `files` dir is path_provider's application-support directory.
+      File? apk;
+      try {
+        final dir = await getApplicationSupportDirectory();
+        apk = File('${dir.path}/ota_update/$filename');
+        // A partial file from an earlier attempt would read as instant progress.
+        if (await apk.exists()) await apk.delete();
+      } catch (e) {
+        if (kDebugMode) debugPrint('update progress file: $e');
+        apk = null; // no file progress — the bar animates instead
       }
-    } catch (e) {
-      if (kDebugMode) debugPrint('downloadAndInstall failed: $e');
-      yield const UpdateProgress(UpdatePhase.error, error: 'อัปเดตไม่สำเร็จ ลองใหม่อีกครั้ง');
-    }
-  }
+      if (cancelled) return; // sheet closed while we resolved the path
 
-  /// Defence-in-depth: strip GitHub's auto-appended "Full Changelog" line and any
-  /// github.com links from the release notes before they reach the update sheet.
-  /// The server sanitises too, but the app must never render an off-domain link
-  /// even if it somehow receives one (old server, tampered response).
-  static String _sanitizeNotes(String raw) {
-    var s = raw.replaceAll(
-        RegExp(r'^\s*\*{0,2}Full Changelog\*{0,2}:.*$',
-            multiLine: true, caseSensitive: false),
-        '');
-    s = s.replaceAll(
-        RegExp(r'https?://\S*github(usercontent)?\.com/\S*', caseSensitive: false),
-        '');
-    return s.replaceAll(RegExp(r'\n{3,}'), '\n\n').trim();
+      final file = apk;
+      if (file != null && info.apkSizeBytes > 0) {
+        var last = -1;
+        var reading = false;
+        poll = Timer.periodic(const Duration(milliseconds: 400), (_) async {
+          if (reading) return;
+          reading = true;
+          try {
+            if (await file.exists()) {
+              final pct = downloadPercent(await file.length(), info.apkSizeBytes);
+              // `poll != null`: installing may have started while we awaited the read.
+              if (pct != null && pct > last && poll != null) {
+                last = pct;
+                emit(UpdateProgress(UpdatePhase.downloading, percent: pct));
+              }
+            }
+          } catch (_) {
+            // the plugin replaced the file mid-read — the next tick reads it again
+          } finally {
+            reading = false;
+          }
+        });
+      }
+
+      try {
+        ota = OtaUpdate()
+            .execute(url, destinationFilename: filename, usePackageInstaller: true)
+            .listen(
+          (event) {
+            final name = event.status.name; // e.g. "DOWNLOADING"
+            if (name == 'DOWNLOADING') {
+              final pct = int.tryParse(event.value ?? '');
+              if (pct != null) {
+                stopPolling(); // the plugin has an exact count — use it
+                emit(UpdateProgress(UpdatePhase.downloading, percent: pct));
+              }
+            } else if (name == 'INSTALLING') {
+              stopPolling();
+              emit(const UpdateProgress(UpdatePhase.installing));
+            } else if (name.contains('DONE')) {
+              stopPolling();
+              emit(const UpdateProgress(UpdatePhase.done));
+            } else if (name.contains('ERROR') || name == 'CANCELED') {
+              fail(_friendlyError(name, event.value));
+            }
+          },
+          onError: (Object e) {
+            if (kDebugMode) debugPrint('downloadAndInstall stream error: $e');
+            fail('อัปเดตไม่สำเร็จ ลองใหม่อีกครั้ง');
+          },
+          onDone: () {
+            stopPolling();
+            if (!out.isClosed) out.close();
+          },
+        );
+      } catch (e) {
+        if (kDebugMode) debugPrint('downloadAndInstall failed: $e');
+        fail('อัปเดตไม่สำเร็จ ลองใหม่อีกครั้ง');
+      }
+    }
+
+    out = StreamController<UpdateProgress>(
+      onListen: () => unawaited(start()),
+      onCancel: () async {
+        cancelled = true;
+        stopPolling();
+        await ota?.cancel();
+      },
+    );
+    return out.stream;
   }
 
   String _friendlyError(String statusName, String? value) {

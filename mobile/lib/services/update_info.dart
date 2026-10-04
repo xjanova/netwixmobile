@@ -65,7 +65,23 @@ bool isReleaseNewer(String curVer, int curBuild, String newVer, int newBuild) {
   return curBuild < newBuild;
 }
 
+/// Download percent from the bytes already on disk vs the manifest's APK size.
+///
+/// This is the progress source because netwix.online sits behind Cloudflare, which
+/// strips `Content-Length` from `/download/apk` — without it `ota_update` never
+/// reports progress and the bar sat at 0% for the whole download.
+/// Null when the size is unknown (the bar animates instead of faking 0%).
+/// Capped at 99: the plugin's INSTALLING/DONE event is what completes the bar.
+int? downloadPercent(int receivedBytes, int totalBytes) {
+  if (totalBytes <= 0 || receivedBytes < 0) return null;
+  final p = (receivedBytes * 100) ~/ totalBytes;
+  return p.clamp(0, 99);
+}
+
 /// Result of an update check (netwix.online release manifest), ready for the UI.
+///
+/// Deliberately carries no release notes: customers are not shown what changed
+/// in an update (owner's call), only that a new version exists.
 class UpdateInfo {
   const UpdateInfo({
     required this.available,
@@ -74,7 +90,6 @@ class UpdateInfo {
     required this.latestVersion,
     required this.latestBuild,
     required this.tag,
-    required this.notes,
     required this.apkUrl,
     required this.apkSizeBytes,
   });
@@ -85,7 +100,6 @@ class UpdateInfo {
   final String latestVersion;
   final int latestBuild;
   final String tag;
-  final String notes;
   final String? apkUrl;
   final int apkSizeBytes;
 

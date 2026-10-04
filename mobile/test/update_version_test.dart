@@ -33,4 +33,28 @@ void main() {
       expect(compareSemver([1], [1, 0, 1]), -1);
     });
   });
+
+  // The update bar used to sit at 0% for the whole download: Cloudflare strips
+  // Content-Length, so the plugin never reported progress. The app now divides the
+  // bytes on disk by the manifest's APK size.
+  group('downloadPercent', () {
+    const apk = 62240328; // the real v1.6.1 APK size from /api/app/version
+
+    test('counts bytes on disk against the manifest size', () {
+      expect(downloadPercent(0, apk), 0);
+      expect(downloadPercent(apk ~/ 4, apk), 25);
+      expect(downloadPercent(apk ~/ 2, apk), 50);
+    });
+
+    test('stays below 100 until the installer takes over', () {
+      expect(downloadPercent(apk, apk), 99);
+      expect(downloadPercent(apk + 4096, apk), 99); // size drifted: never overflows the bar
+    });
+
+    test('unknown size is null (animated bar), not a frozen 0%', () {
+      expect(downloadPercent(1024, 0), isNull);
+      expect(downloadPercent(1024, -1), isNull);
+      expect(downloadPercent(-1, apk), isNull);
+    });
+  });
 }

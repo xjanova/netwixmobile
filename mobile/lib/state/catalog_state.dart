@@ -112,6 +112,15 @@ class CatalogState extends ChangeNotifier {
     return all.take(18).toList();
   }
 
+  /// "มาใหม่" of the selected category (ซีรีส์ / ภาพยนตร์ / แนวตั้ง / อนิเมะ / a genre), so
+  /// every category leads with its newest titles like ทั้งหมด does. The API already
+  /// serves a category newest-first; sorting by id keeps that true across merged pages.
+  List<Content> get newestInCurrent {
+    final items = List<Content>.from(_items[_current.id] ?? const [])
+      ..sort((a, b) => b.id.compareTo(a.id));
+    return items.take(18).toList();
+  }
+
   /// "ดาวเยอะ" — highest-rated titles (rated ones only, then popularity).
   ///
   /// `rating > 0` now filters on REAL member stars. It used to be a no-op: the backend

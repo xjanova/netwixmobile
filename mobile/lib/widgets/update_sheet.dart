@@ -54,7 +54,7 @@ class UpdateSheet extends StatefulWidget {
 class _UpdateSheetState extends State<UpdateSheet> {
   StreamSubscription<UpdateProgress>? _sub;
   UpdatePhase? _phase;
-  int _percent = 0;
+  int? _percent; // null until the first byte count arrives — the bar animates meanwhile
   String? _error;
 
   @override
@@ -65,8 +65,10 @@ class _UpdateSheetState extends State<UpdateSheet> {
 
   void _startUpdate() {
     final updater = context.read<AutoUpdater>();
+    _sub?.cancel(); // a retry after an error must not leave the old attempt's listener running
     setState(() {
       _phase = UpdatePhase.downloading;
+      _percent = null;
       _error = null;
     });
     _sub = updater.downloadAndInstall(widget.info).listen((p) {
@@ -83,9 +85,6 @@ class _UpdateSheetState extends State<UpdateSheet> {
   Widget build(BuildContext context) {
     final l = context.read<AppState>().l;
     final info = widget.info;
-    final notes = info.notes.isEmpty
-        ? l.pick('แก้บั๊กและปรับปรุงประสิทธิภาพ', 'Fixes & performance improvements')
-        : info.notes;
     final busy = _phase == UpdatePhase.downloading || _phase == UpdatePhase.installing;
 
     return Container(
@@ -106,7 +105,8 @@ class _UpdateSheetState extends State<UpdateSheet> {
         children: [
           Center(child: Floating(child: const GemCrest(size: 72, icon: Icons.arrow_downward_rounded))),
           const SizedBox(height: 16),
-          Text(l.bi('มีอะไรใหม่', "What's New"),
+          // No release notes here — customers only learn that a new version exists.
+          Text(l.bi('มีเวอร์ชันใหม่', 'Update available'),
               style: AppTheme.display(22, weight: FontWeight.w700)),
           const SizedBox(height: 6),
           Row(children: [
@@ -116,8 +116,6 @@ class _UpdateSheetState extends State<UpdateSheet> {
               Text(info.sizeLabel, style: AppTheme.body(12, color: T.textMuted)),
             ],
           ]),
-          const SizedBox(height: 16),
-          Text(notes, style: AppTheme.body(14, color: T.textSecondary)),
           const SizedBox(height: 20),
           if (_error != null) ...[
             Text(_error!, style: AppTheme.body(13, color: const Color(0xFFF2705A))),
@@ -166,14 +164,17 @@ class _UpdateSheetState extends State<UpdateSheet> {
 class _ProgressRow extends StatelessWidget {
   const _ProgressRow({required this.phase, required this.percent, required this.l});
   final UpdatePhase phase;
-  final int percent;
+  final int? percent; // null = not known yet → indeterminate bar, never a frozen 0%
   final L10n l;
 
   @override
   Widget build(BuildContext context) {
+    final pct = percent;
     final label = phase == UpdatePhase.installing
         ? l.pick('กำลังติดตั้ง…', 'Installing…')
-        : l.pick('กำลังดาวน์โหลด $percent%', 'Downloading $percent%');
+        : pct == null
+            ? l.pick('กำลังดาวน์โหลด…', 'Downloading…')
+            : l.pick('กำลังดาวน์โหลด $pct%', 'Downloading $pct%');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -182,7 +183,7 @@ class _ProgressRow extends StatelessWidget {
         ClipRRect(
           borderRadius: BorderRadius.circular(100),
           child: LinearProgressIndicator(
-            value: phase == UpdatePhase.installing ? null : percent / 100,
+            value: phase == UpdatePhase.installing || pct == null ? null : pct / 100,
             minHeight: 8,
             backgroundColor: T.hairlineStrong,
             valueColor: const AlwaysStoppedAnimation(T.accent),

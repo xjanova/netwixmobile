@@ -118,15 +118,16 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
           else if (catalog.error != null && catalog.isEmpty)
             _errorBox(l, catalog)
           else ...[
-            // When a category chip is active (e.g. อนิเมะ), lead with that set.
+            // When a category chip is active (e.g. อนิเมะ), lead with that category's
+            // newest titles — every category gets its own มาใหม่ rail, like ทั้งหมด.
             if (!catalog.current.isAll)
               _rail(
                 l,
-                catalog.current.label(l.isTh),
-                catalog.visible,
+                '${l.pick('มาใหม่', 'New arrivals')} 🔥 · ${catalog.current.label(l.isTh)}',
+                catalog.newestInCurrent,
                 badge: catalog.current.id == 'vertical'
                     ? const Pill(text: 'ดูฟรี', filled: true)
-                    : null,
+                    : const Pill(text: 'NEW', filled: true),
                 loading: catalog.filterLoading,
               ),
             // มาใหม่ + ดาวเยอะ lead the page (computed from the full catalogue).
