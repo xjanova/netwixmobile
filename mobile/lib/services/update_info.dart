@@ -78,6 +78,70 @@ int? downloadPercent(int receivedBytes, int totalBytes) {
   return p.clamp(0, 99);
 }
 
+/// Why an update attempt failed. Every failure used to read "อัปเดตไม่สำเร็จ
+/// ลองใหม่อีกครั้ง", and trying again never helps when the cause is a declined
+/// prompt, a signature mismatch or a full disk — the viewer just kept tapping.
+enum UpdateFailure {
+  /// "Install unknown apps" was declined, or Android's install prompt was cancelled.
+  declined,
+
+  /// The installed app was signed by someone else (a build from a computer, another
+  /// store): Android will not install over it until it is uninstalled.
+  signatureMismatch,
+
+  /// The installed build is newer than the release.
+  downgrade,
+  storage,
+
+  /// The device or its maker (e.g. MIUI) blocks apps from installing updates themselves.
+  restricted,
+  network,
+  corrupt,
+  alreadyRunning,
+  cancelled,
+  unknown;
+
+  /// Whether downloading through the browser gets past it — the system installer
+  /// path works where an app-driven install session is blocked.
+  bool get offerBrowser =>
+      this == signatureMismatch || this == restricted || this == unknown;
+}
+
+/// Classifies a failed `ota_update` event from its status name and platform message.
+///
+/// The message is read first because the names can't all be trusted: ota_update
+/// 7.1.0's Dart enum lists ALREADY_RUNNING_ERROR before INSTALLATION_ERROR while its
+/// Java enum has them the other way round, so an install failure arrives in Dart
+/// named ALREADY_RUNNING_ERROR. The other statuses line up.
+UpdateFailure classifyUpdateFailure(String statusName, String? message) {
+  final m = (message ?? '').toUpperCase();
+  if (m.contains('UPDATE_INCOMPATIBLE') || m.contains('SIGNATURES DO NOT MATCH')) {
+    return UpdateFailure.signatureMismatch;
+  }
+  if (m.contains('VERSION_DOWNGRADE')) return UpdateFailure.downgrade;
+  if (m.contains('INSUFFICIENT_STORAGE') || m.contains('NO SPACE LEFT') || m.contains('ENOSPC')) {
+    return UpdateFailure.storage;
+  }
+  if (m.contains('USER_RESTRICTED')) return UpdateFailure.restricted;
+  if (m.contains('ALREADY RUNNING')) return UpdateFailure.alreadyRunning;
+  // "INSTALL_FAILED_ABORTED: User rejected permissions" — both the unknown-sources
+  // prompt and the "Do you want to update this app?" prompt end this way.
+  if (m.contains('ABORTED') || m.contains('REJECTED')) return UpdateFailure.declined;
+  if (m.contains('INSTALL_PARSE_FAILED') || m.contains('INVALID_APK')) return UpdateFailure.corrupt;
+
+  switch (statusName) {
+    case 'PERMISSION_NOT_GRANTED_ERROR':
+      return UpdateFailure.declined;
+    case 'CANCELED':
+      return UpdateFailure.cancelled;
+    case 'CHECKSUM_ERROR':
+      return UpdateFailure.corrupt;
+    case 'DOWNLOAD_ERROR':
+      return UpdateFailure.network;
+  }
+  return UpdateFailure.unknown;
+}
+
 /// Result of an update check (netwix.online release manifest), ready for the UI.
 ///
 /// Deliberately carries no release notes: customers are not shown what changed

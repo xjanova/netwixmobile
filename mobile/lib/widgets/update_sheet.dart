@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../l10n/l10n.dart';
 import '../services/auto_updater.dart';
@@ -55,7 +56,7 @@ class _UpdateSheetState extends State<UpdateSheet> {
   StreamSubscription<UpdateProgress>? _sub;
   UpdatePhase? _phase;
   int? _percent; // null until the first byte count arrives — the bar animates meanwhile
-  String? _error;
+  UpdateFailure? _failure;
 
   @override
   void dispose() {
@@ -69,16 +70,24 @@ class _UpdateSheetState extends State<UpdateSheet> {
     setState(() {
       _phase = UpdatePhase.downloading;
       _percent = null;
-      _error = null;
+      _failure = null;
     });
     _sub = updater.downloadAndInstall(widget.info).listen((p) {
       if (!mounted) return;
       setState(() {
         _phase = p.phase;
         if (p.percent != null) _percent = p.percent!;
-        _error = p.error;
+        _failure = p.failure;
       });
     });
+  }
+
+  /// The fallback when Android won't take the APK from us: the browser hands the same
+  /// file to the system installer, which works where an app's install session is blocked.
+  Future<void> _openInBrowser() async {
+    try {
+      await launchUrl(Uri.parse(AutoUpdater.apkDownloadUrl), mode: LaunchMode.externalApplication);
+    } catch (_) {/* best-effort */}
   }
 
   @override
@@ -117,8 +126,16 @@ class _UpdateSheetState extends State<UpdateSheet> {
             ],
           ]),
           const SizedBox(height: 20),
-          if (_error != null) ...[
-            Text(_error!, style: AppTheme.body(13, color: const Color(0xFFF2705A))),
+          if (_failure != null) ...[
+            Text(_failureText(_failure!, l), style: AppTheme.body(13, color: const Color(0xFFF2705A))),
+            if (_failure!.offerBrowser)
+              TextButton.icon(
+                onPressed: _openInBrowser,
+                style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                icon: const Icon(Icons.open_in_browser_rounded, size: 18, color: T.accent),
+                label: Text(l.pick('ดาวน์โหลดผ่านเบราว์เซอร์', 'Download in browser'),
+                    style: AppTheme.body(13, color: T.accent)),
+              ),
             const SizedBox(height: 12),
           ],
           if (_phase == UpdatePhase.done)
@@ -160,6 +177,31 @@ class _UpdateSheetState extends State<UpdateSheet> {
     );
   }
 }
+
+/// What to tell the viewer, and what to do about it, for each way an update fails.
+String _failureText(UpdateFailure f, L10n l) => switch (f) {
+      UpdateFailure.declined => l.pick(
+          'การติดตั้งถูกยกเลิก — กดอัปเดตอีกครั้ง แล้วอนุญาตให้ NetWix ติดตั้งแอป',
+          'The install was cancelled — tap Update again and allow NetWix to install apps'),
+      UpdateFailure.signatureMismatch => l.pick(
+          'NetWix ในเครื่องนี้ติดตั้งมาจากแหล่งอื่น จึงอัปเดตทับไม่ได้ — ลบแอปเดิมออกก่อน แล้วติดตั้งใหม่จาก netwix.online',
+          "This copy of NetWix came from another source and can't be updated in place — uninstall it, then install again from netwix.online"),
+      UpdateFailure.downgrade =>
+        l.pick('เครื่องนี้มี NetWix เวอร์ชันที่ใหม่กว่าอยู่แล้ว', 'A newer NetWix is already installed'),
+      UpdateFailure.storage => l.pick('พื้นที่ในเครื่องไม่พอ — ลบไฟล์ที่ไม่ใช้แล้วลองใหม่',
+          'Not enough storage — free some space and try again'),
+      UpdateFailure.restricted => l.pick('เครื่องนี้ไม่ให้แอปติดตั้งอัปเดตเอง — ดาวน์โหลดผ่านเบราว์เซอร์แทน',
+          "This phone doesn't let apps install updates — download in the browser instead"),
+      UpdateFailure.network => l.pick('ดาวน์โหลดไม่สำเร็จ ตรวจสอบอินเทอร์เน็ตแล้วลองใหม่',
+          'Download failed — check your connection and try again'),
+      UpdateFailure.corrupt =>
+        l.pick('ไฟล์ติดตั้งเสียหาย ลองใหม่อีกครั้ง', 'The download was damaged — try again'),
+      UpdateFailure.alreadyRunning => l.pick('กำลังดาวน์โหลดอยู่ รอสักครู่แล้วลองใหม่',
+          'A download is already running — wait a moment and try again'),
+      UpdateFailure.cancelled => l.pick('ยกเลิกการอัปเดตแล้ว', 'Update cancelled'),
+      UpdateFailure.unknown => l.pick('อัปเดตไม่สำเร็จ ลองใหม่อีกครั้ง หรือดาวน์โหลดผ่านเบราว์เซอร์',
+          'Update failed — try again, or download in the browser'),
+    };
 
 class _ProgressRow extends StatelessWidget {
   const _ProgressRow({required this.phase, required this.percent, required this.l});
