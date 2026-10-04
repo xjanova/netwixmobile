@@ -103,5 +103,3 @@ jobs:
         with:
           name: netwix-apk
           path: mobile/netwix-*.apk
-
-      - 
