@@ -12,10 +12,12 @@ import 'update_info.dart';
 
 /// Progress of an in-flight update install.
 class UpdateProgress {
-  const UpdateProgress(this.phase, {this.percent, this.error});
+  const UpdateProgress(this.phase, {this.percent, this.failure});
   final UpdatePhase phase;
   final int? percent;
-  final String? error;
+
+  /// Set with [UpdatePhase.error]: what went wrong, so the sheet can say what to do.
+  final UpdateFailure? failure;
 }
 
 enum UpdatePhase { downloading, installing, done, error }
@@ -122,7 +124,7 @@ class AutoUpdater {
     final url = info.apkUrl;
     if (url == null) {
       return Stream.value(
-          const UpdateProgress(UpdatePhase.error, error: 'ไม่พบไฟล์ติดตั้ง (APK)'));
+          const UpdateProgress(UpdatePhase.error, failure: UpdateFailure.unknown));
     }
 
     final filename = 'netwix-${info.latestVersion}.apk';
@@ -132,6 +134,8 @@ class AutoUpdater {
     // Set when the sheet stops listening. `out.isClosed` would NOT flip on a cancel,
     // so start() checks this after its awaits — or it would still arm the timer.
     var cancelled = false;
+    // Once Android has the APK there is nothing left to cancel.
+    var installing = false;
 
     void emit(UpdateProgress p) {
       if (!cancelled && !out.isClosed) out.add(p);
@@ -142,9 +146,9 @@ class AutoUpdater {
       poll = null;
     }
 
-    void fail(String error) {
+    void fail(UpdateFailure failure) {
       stopPolling();
-      emit(UpdateProgress(UpdatePhase.error, error: error));
+      emit(UpdateProgress(UpdatePhase.error, failure: failure));
     }
 
     Future<void> start() async {
@@ -199,18 +203,20 @@ class AutoUpdater {
                 emit(UpdateProgress(UpdatePhase.downloading, percent: pct));
               }
             } else if (name == 'INSTALLING') {
+              installing = true;
               stopPolling();
               emit(const UpdateProgress(UpdatePhase.installing));
             } else if (name.contains('DONE')) {
               stopPolling();
               emit(const UpdateProgress(UpdatePhase.done));
             } else if (name.contains('ERROR') || name == 'CANCELED') {
-              fail(_friendlyError(name, event.value));
+              if (kDebugMode) debugPrint('update failed: $name ${event.value}');
+              fail(classifyUpdateFailure(name, event.value));
             }
           },
           onError: (Object e) {
             if (kDebugMode) debugPrint('downloadAndInstall stream error: $e');
-            fail('อัปเดตไม่สำเร็จ ลองใหม่อีกครั้ง');
+            fail(UpdateFailure.unknown);
           },
           onDone: () {
             stopPolling();
@@ -219,7 +225,7 @@ class AutoUpdater {
         );
       } catch (e) {
         if (kDebugMode) debugPrint('downloadAndInstall failed: $e');
-        fail('อัปเดตไม่สำเร็จ ลองใหม่อีกครั้ง');
+        fail(UpdateFailure.unknown);
       }
     }
 
@@ -229,18 +235,18 @@ class AutoUpdater {
         cancelled = true;
         stopPolling();
         await ota?.cancel();
+        // Dropping our listener does not stop the plugin's download: it kept running
+        // unseen, and every new attempt failed with "already running" until it finished
+        // and an install prompt popped up from nowhere. Stop it so a retry starts clean.
+        if (!installing) {
+          try {
+            await OtaUpdate().cancel();
+          } catch (e) {
+            if (kDebugMode) debugPrint('cancel update download: $e');
+          }
+        }
       },
     );
     return out.stream;
-  }
-
-  String _friendlyError(String statusName, String? value) {
-    if (statusName.contains('PERMISSION')) {
-      return 'ต้องอนุญาตการติดตั้งแอปจากแหล่งนี้ก่อน';
-    }
-    if (statusName == 'CANCELED') return 'ยกเลิกการอัปเดตแล้ว';
-    if (statusName.contains('DOWNLOAD')) return 'ดาวน์โหลดไฟล์ติดตั้งไม่สำเร็จ';
-    if (statusName.contains('CHECKSUM')) return 'ไฟล์ติดตั้งเสียหาย ลองใหม่อีกครั้ง';
-    return 'อัปเดตไม่สำเร็จ ลองใหม่อีกครั้ง';
   }
 }
