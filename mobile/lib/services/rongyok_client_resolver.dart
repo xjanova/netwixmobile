@@ -73,8 +73,9 @@ class RongYokClientResolver {
         r'''/watch/([a-zA-Z0-9_]{4,64}\.php)\?[^"'`\s]*series_id''',
       ).firstMatch((js.data ?? '').replaceAll(r'\/', '/'));
       final fresh = match?.group(1);
-      if (fresh != null && fresh != endpoint)
+      if (fresh != null && fresh != endpoint) {
         return _request(fresh, id, ep, headers);
+      }
     } catch (_) {
       /* Source unavailable on this connection as well. */
     }
@@ -94,8 +95,9 @@ class RongYokClientResolver {
         options: Options(headers: headers, followRedirects: false),
       );
       final data = r.data;
-      if (data is! Map || (data['ok'] != true && data['ok'] != 'true'))
+      if (data is! Map || (data['ok'] != true && data['ok'] != 'true')) {
         return null;
+      }
       final url = data['video_url'];
       return url is String && validVideoUrl(url) ? url : null;
     } catch (_) {
