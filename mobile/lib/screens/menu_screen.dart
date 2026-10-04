@@ -20,6 +20,7 @@ import 'notifications_screen.dart';
 import 'profiles_screen.dart';
 import 'wallet_screen.dart';
 import 'whats_new_screen.dart';
+import 'resolve_assist_screen.dart';
 
 /// 07 — Menu / Settings · เมนู. Bilingual rows (Thai bold + English muted).
 class MenuScreen extends StatelessWidget {
@@ -59,6 +60,9 @@ class MenuScreen extends StatelessWidget {
               onTap: () => Navigator.of(context)
                   .push(MaterialPageRoute(builder: (_) => const WalletScreen()))),
         _notificationsRow(context),
+        if (member.isLoggedIn)
+          _row(context, Icons.phone_android_rounded, 'ช่วยหลังบ้านขอลิงก์', 'Help admin resolve a link',
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ResolveAssistScreen()))),
         _row(context, Icons.system_update_rounded, 'อัปเดต', 'Updates',
             onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const WhatsNewScreen()))),
         _row(context, Icons.description_rounded, 'ข้อตกลงการใช้งาน', 'Terms of Service',

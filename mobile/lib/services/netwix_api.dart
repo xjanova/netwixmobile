@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'rongyok_client_resolver.dart';
 
 import '../models/ad.dart';
 import '../models/content.dart';
@@ -19,8 +20,9 @@ import '../models/wallet.dart';
 /// HMAC-signed HLS proxy for wow-drama. Either way the client plays the returned
 /// url directly (no headers), from any IP. Envelope: `{ "success": bool, "data": {...} }`.
 class NetwixApi {
-  NetwixApi({Dio? dio, String? token})
+  NetwixApi({Dio? dio, String? token, RongYokClientResolver? sourceResolver})
       : _token = token,
+        _sourceResolver = sourceResolver ?? RongYokClientResolver(),
         _dio = dio ??
             Dio(BaseOptions(
               baseUrl: baseUrl,
@@ -63,6 +65,7 @@ class NetwixApi {
   static const String privacyUrl = '$origin/privacy';
 
   final Dio _dio;
+  final RongYokClientResolver _sourceResolver;
   String? _token;
 
   /// Fired once when the server rejects the token we sent, so the app can sign out locally instead
@@ -212,11 +215,30 @@ class NetwixApi {
       final b = r.data;
       final data = (b is Map && b['data'] is Map) ? (b['data'] as Map).cast<String, dynamic>() : null;
       if (data == null) return const NetwixSource(ready: false);
+      // The descriptor is issued only after the server's publication/Pro/VIP/profile gates.
+      // Never use this path on 4xx: a client fallback must not turn a paywall into a stream.
+      if (r.statusCode == 202 && data['error'] == null && data['client_resolve'] is Map) {
+        final url = await _sourceResolver.resolve((data['client_resolve'] as Map).cast<String, dynamic>());
+        if (url != null) return NetwixSource(ready: true, kind: 'mp4', url: url);
+      }
       return NetwixSource.fromJson(data);
     } catch (e) {
       if (kDebugMode) debugPrint('netwix resolveSource($episodeId): $e');
       return null;
     }
+  }
+
+  /// Explicit admin assistance, limited to one short-lived pairing code owned by the account.
+  Future<bool> assistResolution(String code) async {
+    if (_token == null || !RegExp(r'^[A-F0-9]{16}$').hasMatch(code)) return false;
+    try {
+      final data = _data(await _dio.get('/resolve-assist/$code', options: _opts));
+      if (data == null || data['ready'] == true || data['client_resolve'] is! Map) return false;
+      final url = await _sourceResolver.resolve((data['client_resolve'] as Map).cast<String, dynamic>());
+      if (url == null) return false;
+      final result = _data(await _dio.post('/resolve-assist/$code', data: {'video_url': url}, options: _opts));
+      return result?['ready'] == true;
+    } catch (_) { return false; }
   }
 
   /// The pre-roll ad the server picked for this title + viewer, or null.
