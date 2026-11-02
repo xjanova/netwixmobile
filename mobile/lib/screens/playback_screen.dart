@@ -13,6 +13,7 @@ import '../services/catalog_db.dart';
 import '../services/debug_reporter.dart';
 import '../services/format.dart';
 import '../services/netwix_api.dart';
+import '../services/watch_reward_tracker.dart';
 import '../state/app_state.dart';
 import '../state/member_state.dart';
 import '../models/ad.dart';
@@ -52,7 +53,9 @@ class PlaybackScreen extends StatefulWidget {
   State<PlaybackScreen> createState() => _PlaybackScreenState();
 }
 
-class _PlaybackScreenState extends State<PlaybackScreen> {
+class _PlaybackScreenState extends State<PlaybackScreen> with WidgetsBindingObserver {
+  WatchRewardTracker? _rewardWatch;
+  bool _foreground = true;
   late final PageController _pageController;
   late int _current;
 
@@ -120,6 +123,7 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     final start = eps.indexWhere((e) => e.id == widget.startEpisodeId);
     _current = (start < 0 ? 0 : start).clamp(0, eps.length - 1);
     _pageController = PageController(initialPage: _current);
@@ -135,6 +139,7 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
       _api = context.read<NetwixApi>();
       _db = context.read<CatalogDb>();
       _member = context.read<MemberState>();
+      _rewardWatch = WatchRewardTracker(api: _api!, member: _member!, contentId: c.id);
       _isPro = _member!.isPro;
       _autoSkipIntro = context.read<AppState>().autoSkipIntro;
       _adFreq = context.read<AdFrequency>();
@@ -149,6 +154,8 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _rewardWatch?.dispose();
     _saveResume(_current);
     _nextTimer?.cancel();
     for (final ctrl in _controllers.values) {
@@ -389,6 +396,10 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
   void _onTick() {
     final ctrl = _controllers[_current];
     if (ctrl == null || !ctrl.value.isInitialized) return;
+    unawaited(_rewardWatch?.tick(episodeId: eps[_current].id,
+        position: ctrl.value.position.inMilliseconds / 1000,
+        active: _foreground && ctrl.value.isPlaying && !ctrl.value.isBuffering &&
+            _preroll == null && !_finished && ModalRoute.of(context)?.isCurrent == true));
 
     final now = DateTime.now();
     if (ctrl.value.isPlaying && now.difference(_lastResumeSave).inSeconds >= 5) {
@@ -432,6 +443,12 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
       _chrome = false;
     }
     if (mounted) setState(() {});
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _foreground = state == AppLifecycleState.resumed;
+    if (!_foreground) _rewardWatch?.pause();
   }
 
   // ------------------------------------------------------------ pre-roll ad

@@ -168,7 +168,14 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
       'ดู "${c.title}" ฟรีบน NetWix 🎬\n${NetwixApi.titleUrl(c.slug)}',
       'Watch "${c.title}" free on NetWix 🎬\n${NetwixApi.titleUrl(c.slug)}',
     );
-    await SharePlus.instance.share(ShareParams(text: text));
+    final member = context.read<MemberState>();
+    final invite = member.isLoggedIn
+        ? '\nสมัครฟรี / Sign up: ${member.shareLink}'
+        : '';
+    final shared = await SharePlus.instance.share(
+      ShareParams(text: text + invite),
+    );
+    if (shared.status != ShareResultStatus.success) return;
     if (!mounted) return;
     final got = await context.read<MemberState>().awardShare();
     if (got > 0 && mounted) _coinToast(got);

@@ -4,6 +4,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../l10n/l10n.dart';
 import '../models/mission.dart';
+import '../models/reward_campaign.dart';
 import '../services/auth_service.dart';
 import '../services/format.dart';
 import '../services/reward_config.dart';
@@ -18,6 +19,7 @@ import '../widgets/referral_promo_card.dart';
 import 'mission_watch_screen.dart';
 import 'reward_watch_screen.dart';
 import 'team_screen.dart';
+import 'catalog_grid_screen.dart';
 
 /// หาเหรียญ · Earn coins — the activities I defined (backend can add more).
 class EarnCoinsScreen extends StatefulWidget {
@@ -101,6 +103,26 @@ class _EarnCoinsScreenState extends State<EarnCoinsScreen> {
 
             if (!member.isLoggedIn) _loginCard(context, l, member),
 
+            if (member.isLoggedIn) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Text(
+                  l.bi('5 แคมเปญ · ดูเพลินรับโบนัส', 'Explore & earn bonuses'),
+                  style: AppTheme.display(17, weight: FontWeight.w700),
+                ),
+              ),
+              Text(
+                l.pick(
+                  'เว็บและแอปนับรวมกัน · โบนัสเพิ่มจากเหรียญปกติ · รีเซ็ตเวลาไทย',
+                  'Shared with the web · Extra bonus coins · Resets in Bangkok time',
+                ),
+                style: AppTheme.body(12, color: T.textMuted),
+              ),
+              const SizedBox(height: 12),
+              for (final campaign in member.campaigns)
+                _campaignCard(context, l, member, campaign),
+            ],
+
             // ---- ภารกิจพิเศษจากเซิร์ฟเวอร์ (แอดมินกำหนด — ดูคลิปครบเวลารับเหรียญ) ----
             if (member.isLoggedIn && member.missions.isNotEmpty) ...[
               Padding(
@@ -115,7 +137,7 @@ class _EarnCoinsScreenState extends State<EarnCoinsScreen> {
               icon: Icons.event_available_rounded,
               title: l.bi('เช็คอินรายวัน', 'Daily check-in'),
               sub: l.pick('รับทุกวัน', 'Once per day'),
-              coins: RewardConfig.dailyCheckin,
+              coins: member.dailyBaseCoins,
               done: member.checkedInToday,
               actionLabel: member.checkedInToday ? l.pick('รับแล้ววันนี้', 'Claimed') : l.pick('เช็คอิน', 'Check in'),
               onTap: member.checkedInToday
@@ -129,7 +151,7 @@ class _EarnCoinsScreenState extends State<EarnCoinsScreen> {
               icon: Icons.smart_display_rounded,
               title: l.bi('ดูคลิปรับรางวัล', 'Watch a reward clip'),
               sub: '${member.rewardWatchesToday}/${RewardConfig.rewardWatchDailyMax} ${l.pick('วันนี้', 'today')} · ${RewardConfig.rewardWatchSeconds}s',
-              coins: RewardConfig.rewardWatchCoins,
+              coins: member.watchBaseCoins,
               done: !member.canRewardWatch,
               actionLabel: member.canRewardWatch ? l.pick('ดูเลย', 'Watch') : l.pick('ครบวันนี้', 'Maxed'),
               onTap: member.canRewardWatch
@@ -141,17 +163,9 @@ class _EarnCoinsScreenState extends State<EarnCoinsScreen> {
               icon: Icons.group_add_rounded,
               title: l.bi('ชวนเพื่อน', 'Invite friends'),
               sub: l.pick('เพื่อนสมัครผ่านโค้ดเรา', 'Friend signs up with your code'),
-              coins: RewardConfig.referralSignupBonus,
+              coins: member.referralSignupCoins,
               actionLabel: l.pick('แชร์', 'Share'),
               onTap: () => _shareReferral(context, member, l),
-            ),
-            _activity(
-              icon: Icons.playlist_play_rounded,
-              title: l.bi('ดูครบ 5 ตอนใน 1 วัน', 'Watch 5 episodes today'),
-              sub: l.pick('รับอัตโนมัติเมื่อครบ', 'Auto-granted'),
-              coins: RewardConfig.watchFiveDaily,
-              actionLabel: l.pick('อัตโนมัติ', 'Auto'),
-              onTap: null,
             ),
           ],
         ),
@@ -191,6 +205,101 @@ class _EarnCoinsScreenState extends State<EarnCoinsScreen> {
           ),
           Text('1 ${l.pick('ตอน', 'ep')} = ${RewardConfig.unlockCost} ${l.pick('เหรียญ', 'coins')}',
               style: AppTheme.body(11.5, color: T.textFaint)),
+        ],
+      ),
+    );
+  }
+
+  Widget _campaignCard(
+    BuildContext context,
+    L10n l,
+    MemberState member,
+    RewardCampaign c,
+  ) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: T.glass(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  c.title,
+                  style: AppTheme.body(
+                    15,
+                    weight: FontWeight.w700,
+                    color: T.textPrimary,
+                  ),
+                ),
+              ),
+              Text(
+                '+${c.coins} 🪙',
+                style: AppTheme.body(
+                  16,
+                  weight: FontWeight.w700,
+                  color: T.accent,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(c.description, style: AppTheme.body(12.5, color: T.textMuted)),
+          const SizedBox(height: 12),
+          LinearProgressIndicator(
+            value: c.target > 0 ? (c.progress / c.target).clamp(0.0, 1.0) : 0,
+            color: T.accent,
+            backgroundColor: T.hairline,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '${c.progress}/${c.target} · ${c.repeat == 'weekly'
+                ? 'รายสัปดาห์'
+                : c.repeat == 'daily'
+                ? 'รายวัน'
+                : 'ครั้งเดียว'}${c.earned ? ' · รับโบนัสแล้ว ✓' : ''}',
+            style: AppTheme.body(12, color: T.textMuted),
+          ),
+          if (!c.earned)
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: () async {
+                  if (c.kind == 'daily') {
+                    final got = await member.dailyCheckIn();
+                    if (context.mounted) {
+                      _toast(
+                        context,
+                        got > 0 ? '+$got เหรียญ' : 'รับรางวัลรอบนี้แล้ว',
+                      );
+                    }
+                  } else if (c.kind == 'share' || c.kind == 'referral') {
+                    await _shareReferral(context, member, l);
+                  } else {
+                    await Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => Scaffold(
+                          appBar: AppBar(title: const Text('สำรวจเรื่องใหม่')),
+                          body: const SafeArea(child: CatalogGridScreen()),
+                        ),
+                      ),
+                    );
+                  }
+                  await member.refreshMissions();
+                },
+                child: Text(
+                  c.kind == 'daily'
+                      ? 'เช็กอินเลย'
+                      : c.kind == 'referral'
+                      ? 'ชวนเพื่อน'
+                      : c.kind == 'share'
+                      ? 'แชร์เลย'
+                      : 'ไปสำรวจ',
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -377,20 +486,28 @@ class _EarnCoinsScreenState extends State<EarnCoinsScreen> {
     );
   }
 
-  Future<void> _shareReferral(BuildContext context, MemberState member, L10n l) async {
+  Future<void> _shareReferral(
+    BuildContext context,
+    MemberState member,
+    L10n l,
+  ) async {
     final code = member.referralCode;
     final link = member.shareLink;
-    final months = member.referralRewardMonths;
+    final days = member.referralProDays;
     final text = l.pick(
       'มาดูซีรีส์ฟรีกับ NetWix! 🎬\n'
-          'สมัครด้วยโค้ด $code แล้วดูให้จบ 1 ตอน — ชวนครบ 3 คน ฉันได้ Pro ฟรี $months เดือน 🎁\n$link',
+          'สมัครด้วยโค้ด $code รับ Pro ฟรี $days วัน และรับสิทธิ์ตามแคมเปญ 🎁\n$link',
       'Watch series free on NetWix! 🎬\n'
-          'Sign up with code $code and finish 1 episode — 3 friends unlock $months months of Pro for me 🎁\n$link',
+          'Sign up with code $code for $days free Pro days and campaign rewards 🎁\n$link',
     );
-    await SharePlus.instance.share(ShareParams(text: text));
+    if (!member.isLoggedIn) return;
+    final shared = await SharePlus.instance.share(ShareParams(text: text));
+    if (shared.status != ShareResultStatus.success) return;
     if (!context.mounted) return;
     final got = await member.awardShare();
-    if (context.mounted && got > 0) _toast(context, '+$got ${l.pick('เหรียญ', 'coins')}');
+    if (context.mounted && got > 0) {
+      _toast(context, '+$got ${l.pick('เหรียญ', 'coins')}');
+    }
   }
 
   void _toast(BuildContext context, String msg) =>
