@@ -9,6 +9,7 @@ import '../models/episode.dart';
 import '../models/legal.dart';
 import '../models/member.dart';
 import '../models/mission.dart';
+import '../models/reward_campaign.dart';
 import '../models/profile.dart';
 import '../models/wallet.dart';
 
@@ -464,6 +465,49 @@ class NetwixApi {
     } catch (e) {
       if (kDebugMode) debugPrint('netwix missions: $e');
       return const [];
+    }
+  }
+
+  Future<List<RewardCampaign>?> fetchRewardCampaigns() async {
+    try {
+      final d = _data(await _dio.get('/rewards/campaigns', options: _opts));
+      final items = d?['items'];
+      if (items is! List) return null;
+      return items
+          .whereType<Map>()
+          .map((e) => RewardCampaign.fromJson(e.cast<String, dynamic>()))
+          .toList();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> startWatchReward(
+    int contentId,
+    int episodeId,
+    double position,
+  ) => _watchReward('/rewards/watch/start', {
+    'content_id': contentId,
+    'episode_id': episodeId,
+    'position': position,
+  });
+
+  Future<Map<String, dynamic>?> beatWatchReward(
+    String token,
+    double position,
+  ) => _watchReward('/rewards/watch/beat', {
+    'token': token,
+    'position': position,
+  });
+
+  Future<Map<String, dynamic>?> _watchReward(
+    String path,
+    Map<String, dynamic> body,
+  ) async {
+    try {
+      return _data(await _dio.post(path, data: body, options: _opts));
+    } catch (_) {
+      return null;
     }
   }
 

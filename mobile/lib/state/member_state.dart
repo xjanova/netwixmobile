@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../models/member.dart';
 import '../models/mission.dart';
+import '../models/reward_campaign.dart';
 import '../models/referral.dart';
 import '../services/account_store.dart';
 import '../services/auth_service.dart';
@@ -28,6 +29,8 @@ class MemberState extends ChangeNotifier {
   ReferralStatus? _referral;
   bool _dailyAvailable = true; // server: daily_checkin_available
   List<MissionItem> _missions = const [];
+  List<RewardCampaign> _campaigns = const [];
+  List<RewardCampaign> get campaigns => _campaigns;
   Map<String, dynamic>? _config; // public membership/config (campaign rules)
 
   Member? get member => _member;
@@ -54,6 +57,23 @@ class MemberState extends ChangeNotifier {
     final ref = _config?['referral'];
     if (ref is! Map || ref['enabled'] == false) return 0;
     return (ref['referee_pro_days'] as num?)?.toInt() ?? 0;
+  }
+
+  int get referralSignupCoins {
+    final ref = _config?['referral'];
+    return ref is Map ? (ref['referrer_coins'] as num?)?.toInt() ?? 0 : 0;
+  }
+
+  int _earnRule(String key, int fallback) {
+    final earn = _config?['earn'];
+    return isLoggedIn && earn is Map ? (earn[key] as num?)?.toInt() ?? fallback : fallback;
+  }
+  int get dailyBaseCoins => _earnRule('daily_checkin_coins', RewardConfig.dailyCheckin);
+  int get watchBaseCoins => _earnRule('watch_reward_coins', RewardConfig.rewardWatchCoins);
+  int get watchDailyCap => _earnRule('watch_reward_daily_cap', RewardConfig.rewardWatchDailyMax);
+  int get inviterProDays {
+    final ref = _config?['referral'];
+    return ref is Map ? (ref['referrer_pro_days'] as num?)?.toInt() ?? 0 : 0;
   }
 
   /// Prefer the server's referral code; fall back to the cached member's.
@@ -116,7 +136,9 @@ class MemberState extends ChangeNotifier {
 
   /// Pull the watch-to-earn missions + this member's status for each.
   Future<void> refreshMissions() async {
+    final identity = _member?.token;
     if (!isLoggedIn) {
+      _campaigns = const [];
       if (_missions.isNotEmpty) {
         _missions = const [];
         notifyListeners();
@@ -124,7 +146,10 @@ class MemberState extends ChangeNotifier {
       return;
     }
     final items = await _api.fetchMissions();
+    final campaigns = await _api.fetchRewardCampaigns();
+    if (_member?.token != identity || !isLoggedIn) return;
     _missions = items;
+    if (campaigns != null) _campaigns = campaigns;
     notifyListeners();
   }
 
@@ -177,6 +202,7 @@ class MemberState extends ChangeNotifier {
     // Server is the source of truth for coins/Pro/referral (incl. the signup
     // bonus + any referral grant applied at sign-up).
     await refreshMembership();
+    await refreshMissions();
     notifyListeners();
     return res;
   }
@@ -190,6 +216,7 @@ class MemberState extends ChangeNotifier {
     _member = null;
     _referral = null;
     _missions = const [];
+    _campaigns = const [];
     _gold = 0;
     _coins = 0;
     _api.setToken(null);
@@ -206,6 +233,7 @@ class MemberState extends ChangeNotifier {
     _member = null;
     _referral = null;
     _missions = const [];
+    _campaigns = const [];
     _gold = 0;
     unawaited(_store.setMember(null));
     notifyListeners();
@@ -216,6 +244,7 @@ class MemberState extends ChangeNotifier {
     _member = null;
     _referral = null;
     _missions = const [];
+    _campaigns = const [];
     _gold = 0;
     _api.setToken(null);
     await _store.setMember(null);
@@ -307,6 +336,7 @@ class MemberState extends ChangeNotifier {
       final before = _coins;
       final res = await _api.earnCoins('daily');
       if (res.state != null) _applyState(res.state);
+      await refreshMissions();
       notifyListeners();
       if (!res.ok) return 0;
       final earned = _coins - before;
@@ -351,6 +381,7 @@ class MemberState extends ChangeNotifier {
     final before = _coins;
     final res = await _api.earnCoins(kind);
     if (res.state != null) _applyState(res.state);
+    await refreshMissions();
     notifyListeners();
     if (!res.ok) return 0; // capped for today (or offline)
     final earned = _coins - before;
