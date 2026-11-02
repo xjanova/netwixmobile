@@ -17,6 +17,17 @@ class Format {
   static String speed(double bytesPerSec) =>
       bytesPerSec <= 1 ? '' : '${bytes(bytesPerSec.toInt())}/s';
 
+  /// 12345 → "12,345" (balances on the coin screens).
+  static String grouped(int n) {
+    final s = n.abs().toString();
+    final out = StringBuffer(n < 0 ? '-' : '');
+    for (var i = 0; i < s.length; i++) {
+      if (i > 0 && (s.length - i) % 3 == 0) out.write(',');
+      out.write(s[i]);
+    }
+    return out.toString();
+  }
+
   static String percent(double fraction) => '${(fraction.clamp(0, 1) * 100).toStringAsFixed(0)}%';
 
   /// A day-count as the nicest Thai/English unit — mirrors the web's
