@@ -95,4 +95,15 @@ void main() {
     await tracker.tick(episodeId: 1, position: 300, active: true);
     expect(api.calls, isEmpty); expect(member.applied, 0);
   });
+
+  test('resume after backgrounding starts a fresh baseline instead of claiming background time', () async {
+    final api = _Api(); final member = _Member(api);
+    var now = DateTime(2026,11,2,12);
+    final tracker = WatchRewardTracker(api:api,member:member,contentId:9,clock:()=>now);
+    await tracker.tick(episodeId:4,position:0,active:true);
+    tracker.pause(); now = now.add(const Duration(seconds:10));
+    await tracker.tick(episodeId:4,position:10,active:true);
+    expect(api.calls,['start:9:4','start:9:4']);
+    expect(member.applied,0);
+  });
 }

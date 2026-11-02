@@ -16,10 +16,17 @@ class WatchRewardTracker {
   String? _token, _identity;
   int? _episode;
   bool _busy = false, _disposed = false;
+  int _generation = 0;
   DateTime _last = DateTime.fromMillisecondsSinceEpoch(0);
 
   void dispose() {
     _disposed = true;
+  }
+
+  void pause() {
+    _token = null;
+    _last = DateTime.fromMillisecondsSinceEpoch(0);
+    _generation++;
   }
 
   Future<void> tick({
@@ -27,16 +34,16 @@ class WatchRewardTracker {
     required double position,
     required bool active,
   }) async {
+    if (!active || !member.isLoggedIn) { pause(); return; }
     if (_disposed ||
         _busy ||
-        !active ||
-        !member.isLoggedIn ||
         !position.isFinite ||
         _now().difference(_last).inSeconds < 15) {
       return;
     }
     _last = _now();
     _busy = true;
+    final generation = _generation;
     final identity = member.member?.token;
     if (_episode != episodeId || _identity != identity) {
       _token = null;
@@ -47,7 +54,9 @@ class WatchRewardTracker {
       final result = _token == null
           ? await api.startWatchReward(contentId, episodeId, position)
           : await api.beatWatchReward(_token!, position);
-      if (_disposed || member.member?.token != identity) return;
+      if (_disposed || generation != _generation || member.member?.token != identity) {
+        return;
+      }
       if (result == null) {
         _token = null;
         return;

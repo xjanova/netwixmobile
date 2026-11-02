@@ -448,6 +448,7 @@ class _PlaybackScreenState extends State<PlaybackScreen> with WidgetsBindingObse
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _foreground = state == AppLifecycleState.resumed;
+    if (!_foreground) _rewardWatch?.pause();
   }
 
   // ------------------------------------------------------------ pre-roll ad
