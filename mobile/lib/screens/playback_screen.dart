@@ -200,6 +200,27 @@ class _PlaybackScreenState extends State<PlaybackScreen> with WidgetsBindingObse
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => const GoProScreen()));
   }
 
+  /// A guest reached the end of the free preview (same quota as the web). Signing in lifts it,
+  /// so every episode the server refused for that reason is resolved again.
+  Future<void> _signUpToContinue(int index) async {
+    if (!(_member?.isLoggedIn ?? false)) {
+      await showLoginSheet(context);
+      if (!mounted || !(_member?.isLoggedIn ?? false)) return;
+    }
+    final gated = [
+      for (final e in _denied.entries)
+        if (e.value == 'signup_required') e.key
+    ];
+    for (final i in gated) {
+      _denied.remove(i);
+    }
+    setState(() {});
+    await _ensure(index);
+    for (final i in gated) {
+      if (i != index && mounted) unawaited(_ensure(i));
+    }
+  }
+
   /// Spend gold to open a VIP title. Confirms first (this costs real money) and
   /// re-resolves the stream on success.
   Future<void> _unlockVipAt(int index) async {
@@ -804,6 +825,8 @@ class _PlaybackScreenState extends State<PlaybackScreen> with WidgetsBindingObse
               onUnlock: () => _unlockAt(index),
               onGoPro: _openGoPro,
               onUnlockVip: () => _unlockVipAt(index),
+              onSignUp: () => _signUpToContinue(index),
+              freeEpisodes: _member?.freeEpisodes ?? 0,
               onTapVideo: index == _current ? _onVideoTap : null,
               onRetry: () => _ensure(index),
               l: l,
@@ -1138,6 +1161,8 @@ class _EpisodePage extends StatelessWidget {
     required this.onUnlock,
     required this.onGoPro,
     required this.onUnlockVip,
+    required this.onSignUp,
+    required this.freeEpisodes,
     required this.onTapVideo,
     required this.onRetry,
     required this.l,
@@ -1162,6 +1187,10 @@ class _EpisodePage extends StatelessWidget {
   /// tells the viewer what's actually wrong).
   final VoidCallback? onGoPro;
   final VoidCallback? onUnlockVip;
+  final VoidCallback onSignUp;
+
+  /// The admin's free preview length for guests (from the web's membership config).
+  final int freeEpisodes;
   final VoidCallback? onTapVideo;
   final VoidCallback onRetry;
   final L10n l;
@@ -1184,7 +1213,7 @@ class _EpisodePage extends StatelessWidget {
       return _StatusPage(
         icon: Icons.lock_rounded,
         title: '${l.pick('ตอนที่', 'EP')} ${episode.number} ${l.pick('ถูกล็อก', 'locked')}',
-        subtitle: l.pick('ดูฟรี 3 ตอนแรก · ตอนถัดไปใช้เหรียญ', 'First 3 free · unlock with coins'),
+        subtitle: l.pick('ดูฟรี $freeEpisodes ตอนแรก · ตอนถัดไปใช้เหรียญ', 'First $freeEpisodes free · unlock with coins'),
         action: GestureDetector(
           onTap: onUnlock,
           child: Container(
@@ -1215,6 +1244,25 @@ class _EpisodePage extends StatelessWidget {
     // purchase (or is gone for good) just makes them wait for nothing.
     if (deniedReason != null) {
       switch (deniedReason) {
+        case 'signup_required':
+          return _StatusPage(
+            icon: Icons.person_add_alt_1_rounded,
+            title: l.pick('สมัครฟรี เพื่อดูต่อ', 'Sign up free to keep watching'),
+            subtitle: freeEpisodes > 0
+                ? l.pick('ดูตัวอย่างฟรีครบ $freeEpisodes ตอนแล้ว · สมัครสมาชิกฟรีเพื่อดูตอนที่ ${episode.number} ต่อ',
+                    'You watched the $freeEpisodes free episodes · sign up free to watch EP ${episode.number}')
+                : l.pick('สมัครสมาชิกฟรีเพื่อรับชมตอนนี้', 'Sign up free to watch this episode'),
+            action: GestureDetector(
+              onTap: onSignUp,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                decoration: BoxDecoration(
+                    gradient: T.accentGradient, borderRadius: BorderRadius.circular(T.rButton)),
+                child: Text(l.pick('สมัคร / เข้าสู่ระบบ', 'Sign up / Sign in'),
+                    style: AppTheme.display(14, weight: FontWeight.w700, color: T.onAccent)),
+              ),
+            ),
+          );
         case 'pro_required':
           return _StatusPage(
             icon: Icons.workspace_premium_rounded,

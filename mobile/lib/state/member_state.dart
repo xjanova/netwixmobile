@@ -64,10 +64,41 @@ class MemberState extends ChangeNotifier {
     return ref is Map ? (ref['referrer_coins'] as num?)?.toInt() ?? 0 : 0;
   }
 
+  /// Episodes a guest may watch per title before the web asks them to sign up
+  /// (`free_episodes`). Null until the config has loaded — the server still gates.
+  int? get guestFreeEpisodes => (_config?['free_episodes'] as num?)?.toInt();
+
+  /// Same number for display; falls back to the client default before the config loads.
+  int get freeEpisodes => guestFreeEpisodes ?? RewardConfig.freeEpisodes;
+
+  /// True when this guest is past the free preview for an episode numbered [number].
+  bool guestNeedsSignup(int number) {
+    final free = guestFreeEpisodes;
+    return !isLoggedIn && free != null && number > free;
+  }
+
+  /// Monthly Pro price in baht, as the web's promo builder has it.
+  int get proPriceThb {
+    final pro = _config?['pro'];
+    return pro is Map ? ((pro['price_thb'] as num?)?.toInt() ?? 129) : 129;
+  }
+
+  /// Coins a brand-new account gets on its first sign-in.
+  int get signupBonusCoins =>
+      (_config?['signup_bonus_coins'] as num?)?.toInt() ?? RewardConfig.firstLoginBonus;
+
   int _earnRule(String key, int fallback) {
     final earn = _config?['earn'];
     return isLoggedIn && earn is Map ? (earn[key] as num?)?.toInt() ?? fallback : fallback;
   }
+  /// Like / comment / share payouts and daily caps, as the web pays them.
+  ({({int coins, int cap}) like, ({int coins, int cap}) comment, ({int coins, int cap}) share})
+      get socialEarnRules => (
+            like: (coins: _earnRule('like_coins', RewardConfig.likeCoins), cap: _earnRule('like_daily_cap', RewardConfig.likeDailyMax)),
+            comment: (coins: _earnRule('comment_coins', RewardConfig.commentCoins), cap: _earnRule('comment_daily_cap', RewardConfig.commentDailyMax)),
+            share: (coins: _earnRule('share_coins', RewardConfig.shareCoins), cap: _earnRule('share_daily_cap', RewardConfig.shareDailyMax)),
+          );
+
   int get dailyBaseCoins => _earnRule('daily_checkin_coins', RewardConfig.dailyCheckin);
   int get watchBaseCoins => _earnRule('watch_reward_coins', RewardConfig.rewardWatchCoins);
   int get watchDailyCap => _earnRule('watch_reward_daily_cap', RewardConfig.rewardWatchDailyMax);
@@ -121,6 +152,22 @@ class MemberState extends ChangeNotifier {
 
   /// Pull the member's server truth — profile, coins, Pro, referral. Keeps the
   /// cached values on a transient failure so the UI never flickers.
+  /// Contact details from the server (shared with the web's /account/settings).
+  Future<AccountContact?> fetchAccount() => isLoggedIn ? _api.fetchAccount() : Future.value(null);
+
+  /// Save contact details and mirror the new display name into the cached member.
+  Future<AccountContact?> saveAccount({required String name, String? phone, String? address}) async {
+    if (!isLoggedIn) return null;
+    final identity = _member?.token;
+    final saved = await _api.updateAccount(name: name, phone: phone, address: address);
+    // Signed out / switched account while saving: don't paint the old account's name on the new one.
+    if (saved == null || _member?.token != identity || _member == null) return saved;
+    _member = _member!.copyWith(name: saved.name);
+    unawaited(_store.setMember(_member));
+    notifyListeners();
+    return saved;
+  }
+
   Future<void> refreshMembership() async {
     if (!isLoggedIn) return;
     final me = await _api.fetchMe();
@@ -288,7 +335,7 @@ class MemberState extends ChangeNotifier {
   bool isEpisodeUnlocked(int contentId, int episodeId, int index, {required bool isPro}) {
     if (!RewardConfig.gatingEnabled) return true;
     if (isPro) return true;
-    if (index < RewardConfig.freeEpisodes) return true;
+    if (index < freeEpisodes) return true;
     return _store.isUnlocked(contentId, episodeId);
   }
 
@@ -311,13 +358,13 @@ class MemberState extends ChangeNotifier {
       return true;
     }
 
-    if (!await _spend(RewardConfig.unlockCost)) return false;
+    if (!await _spend(unlockCost)) return false;
     await _store.addUnlock(contentId, episodeId);
     notifyListeners();
     return true;
   }
 
-  int get unlockCost => RewardConfig.unlockCost;
+  int get unlockCost => (_config?['unlock_cost_coins'] as num?)?.toInt() ?? RewardConfig.unlockCost;
 
   // -------------------------------------------------------- activities
 
@@ -350,7 +397,7 @@ class MemberState extends ChangeNotifier {
   }
 
   int get rewardWatchesToday => _store.activityCount(_today, 'reward');
-  bool get canRewardWatch => rewardWatchesToday < RewardConfig.rewardWatchDailyMax;
+  bool get canRewardWatch => rewardWatchesToday < watchDailyCap;
 
   /// Grants coins for finishing a reward clip. Signed in → server (which
   /// enforces the daily cap); guest → local.

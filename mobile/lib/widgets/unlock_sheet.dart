@@ -69,7 +69,7 @@ class _UnlockSheetState extends State<_UnlockSheet> {
                   children: [
                     Text('${l.pick('ปลดล็อกตอนที่', 'Unlock EP')} ${widget.episode}',
                         style: AppTheme.display(19, weight: FontWeight.w700)),
-                    Text(l.pick('ดูฟรี 3 ตอนแรกทุกเรื่อง', 'First 3 episodes free'),
+                    Text(l.pick('ดูฟรี ${member.freeEpisodes} ตอนแรกทุกเรื่อง', 'First ${member.freeEpisodes} episodes free'),
                         style: AppTheme.body(12, color: T.textMuted)),
                   ],
                 ),

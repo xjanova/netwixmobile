@@ -298,6 +298,17 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
       if (!unlocked) return;
     }
 
+    // Past the guest preview the web asks for a free sign-up; ask before opening the player.
+    if (member.guestNeedsSignup(ep.number)) {
+      _preview?.pause();
+      await showLoginSheet(context);
+      if (!mounted) return;
+      if (!member.isLoggedIn) {
+        _preview?.play();
+        return;
+      }
+    }
+
     _preview?.pause();
     if (!mounted) return;
     await Navigator.of(context).push(MaterialPageRoute(
@@ -566,7 +577,8 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
     final member = context.watch<MemberState>();
     final isPro = context.watch<MemberState>().isPro;
     final unlocked = member.isEpisodeUnlocked(c.id, ep.id, index, isPro: isPro);
-    final free = !RewardConfig.gatingEnabled || index < RewardConfig.freeEpisodes;
+    final free = !RewardConfig.gatingEnabled || index < member.freeEpisodes;
+    final needsSignup = member.guestNeedsSignup(ep.number);
 
     // Sub-label: availability first, then gating status. We don't infer
     // "preparing" from is_mirrored here — wow-drama episodes play via HLS
@@ -577,6 +589,9 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
     if (ep.isUnavailable) {
       sub = l.pick('ไม่พร้อมใช้งาน', 'Unavailable');
       subColor = T.textFaint;
+    } else if (needsSignup) {
+      sub = l.pick('สมัครฟรีเพื่อดูต่อ', 'Sign up free to watch');
+      subColor = T.accent;
     } else if (free) {
       sub = l.pick('ดูฟรี', 'Free');
       subColor = T.textFaint;
@@ -591,9 +606,11 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
     final playable = !ep.isUnavailable;
     final icon = ep.isUnavailable
         ? Icons.block_rounded
-        : !unlocked
-            ? Icons.lock_outline_rounded
-            : Icons.play_circle_outline_rounded;
+        : needsSignup
+            ? Icons.person_add_alt_1_rounded
+            : !unlocked
+                ? Icons.lock_outline_rounded
+                : Icons.play_circle_outline_rounded;
 
     return InkWell(
       onTap: playable ? () => _play(index) : null,

@@ -11,7 +11,9 @@ import '../theme/hex.dart';
 import '../theme/tokens.dart';
 import '../state/notification_state.dart';
 import '../widgets/common.dart';
+import '../widgets/icon3d.dart';
 import '../widgets/login_sheet.dart';
+import 'account_settings_screen.dart';
 import 'earn_coins_screen.dart';
 import 'go_pro_screen.dart';
 import 'legal_screen.dart';
@@ -22,7 +24,8 @@ import 'wallet_screen.dart';
 import 'whats_new_screen.dart';
 import 'resolve_assist_screen.dart';
 
-/// 07 — Menu / Settings · เมนู. Bilingual rows (Thai bold + English muted).
+/// 07 — Menu / Settings · เมนู. Grouped frosted sections, 3D icons, and every number
+/// (Pro price, sign-up bonus, referral reward) read from the web's live membership config.
 class MenuScreen extends StatelessWidget {
   const MenuScreen({super.key});
 
@@ -34,46 +37,60 @@ class MenuScreen extends StatelessWidget {
     final effectivePro = member.isPro;
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
       children: [
         Text(l.bi('เมนู', 'Menu'), style: AppTheme.display(21, weight: FontWeight.w700)),
         const SizedBox(height: 16),
         _accountCard(context, app),
         const SizedBox(height: 12),
         _coinsRow(context, l),
-        if (member.isLoggedIn && !effectivePro) ...[
+        if (member.isLoggedIn && !effectivePro && member.inviterProDays > 0) ...[
           const SizedBox(height: 12),
           _referralPromoRow(context, l, member),
         ],
-        const SizedBox(height: 16),
-        _languageRow(context, app),
-        const SizedBox(height: 8),
-        if (member.isLoggedIn)
-          _row(context, Icons.people_alt_rounded, 'โปรไฟล์', 'Profiles',
+        const SizedBox(height: 14),
+        if (!effectivePro) _upgradeBanner(context, l, member) else _proActiveBanner(l, member),
+        _groupTitle(l.pick('บัญชีและการรับชม', 'Account & watching')),
+        _group([
+          if (member.isLoggedIn)
+            _row(context, Ic3.account, 'ข้อมูลบัญชี', 'Account details',
+                onTap: () => Navigator.of(context)
+                    .push(MaterialPageRoute(builder: (_) => const AccountSettingsScreen()))),
+          if (member.isLoggedIn)
+            _row(context, Ic3.profiles, 'โปรไฟล์', 'Profiles',
+                onTap: () => Navigator.of(context)
+                    .push(MaterialPageRoute(builder: (_) => const ProfilesScreen()))),
+          _row(context, Ic3.mylist, 'รายการของฉัน', 'My List',
               onTap: () => Navigator.of(context)
-                  .push(MaterialPageRoute(builder: (_) => const ProfilesScreen()))),
-        _row(context, Icons.bookmark_rounded, 'รายการของฉัน', 'My List',
-            onTap: () => Navigator.of(context)
-                .push(MaterialPageRoute(builder: (_) => const MyListScreen()))),
-        if (member.isLoggedIn)
-          _row(context, Icons.account_balance_wallet_rounded, 'กระเป๋าเหรียญทอง', 'Gold wallet',
+                  .push(MaterialPageRoute(builder: (_) => const MyListScreen()))),
+          if (member.isLoggedIn)
+            _row(context, Ic3.wallet, 'กระเป๋าเหรียญทอง', 'Gold wallet',
+                onTap: () => Navigator.of(context)
+                    .push(MaterialPageRoute(builder: (_) => const WalletScreen()))),
+          _row(context, Ic3.trophy, 'ภารกิจ & เหรียญ', 'Missions & coins',
               onTap: () => Navigator.of(context)
-                  .push(MaterialPageRoute(builder: (_) => const WalletScreen()))),
-        _notificationsRow(context),
-        if (member.isLoggedIn)
-          _row(context, Icons.phone_android_rounded, 'ช่วยหลังบ้านขอลิงก์', 'Help admin resolve a link',
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ResolveAssistScreen()))),
-        _row(context, Icons.system_update_rounded, 'อัปเดต', 'Updates',
-            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const WhatsNewScreen()))),
-        _row(context, Icons.description_rounded, 'ข้อตกลงการใช้งาน', 'Terms of Service',
-            onTap: () => Navigator.of(context)
-                .push(MaterialPageRoute(builder: (_) => const LegalScreen(doc: 'terms')))),
-        _row(context, Icons.privacy_tip_rounded, 'นโยบายความเป็นส่วนตัว', 'Privacy Policy',
-            onTap: () => Navigator.of(context)
-                .push(MaterialPageRoute(builder: (_) => const LegalScreen(doc: 'privacy')))),
-        _row(context, Icons.info_rounded, 'เกี่ยวกับ', 'About', onTap: () => _about(context, l)),
-        const SizedBox(height: 20),
-        if (!effectivePro) _upgradeBanner(context, l) else _proActiveBanner(l, member),
+                  .push(MaterialPageRoute(builder: (_) => const EarnCoinsScreen()))),
+        ]),
+        _groupTitle(l.pick('แอป', 'App')),
+        _group([
+          _languageRow(context, app),
+          _notificationsRow(context),
+          _row(context, Ic3.update, 'อัปเดต', 'Updates',
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const WhatsNewScreen()))),
+          if (member.isLoggedIn)
+            _row(context, Ic3.clip, 'ช่วยหลังบ้านขอลิงก์', 'Help admin resolve a link',
+                onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ResolveAssistScreen()))),
+        ]),
+        _groupTitle(l.pick('ข้อกำหนด', 'Legal')),
+        _group([
+          _row(context, Ic3.shield, 'ข้อตกลงการใช้งาน', 'Terms of Service',
+              onTap: () => Navigator.of(context)
+                  .push(MaterialPageRoute(builder: (_) => const LegalScreen(doc: 'terms')))),
+          _row(context, Ic3.shield, 'นโยบายความเป็นส่วนตัว', 'Privacy Policy',
+              onTap: () => Navigator.of(context)
+                  .push(MaterialPageRoute(builder: (_) => const LegalScreen(doc: 'privacy')))),
+          _row(context, Ic3.gift, 'เกี่ยวกับ', 'About', onTap: () => _about(context, l, member)),
+        ]),
         if (member.isLoggedIn) ...[
           const SizedBox(height: 28),
           _dangerZone(context, l),
@@ -82,18 +99,37 @@ class MenuScreen extends StatelessWidget {
     );
   }
 
+  Widget _groupTitle(String text) => Padding(
+        padding: const EdgeInsets.fromLTRB(6, 22, 6, 8),
+        child: Text(text, style: AppTheme.body(12.5, weight: FontWeight.w700, color: T.textMuted)),
+      );
+
+  /// One frosted card holding a run of rows, separated by hairlines.
+  Widget _group(List<Widget> rows) => Container(
+        decoration: T.glass(radius: 20),
+        clipBehavior: Clip.antiAlias,
+        child: Material(
+          color: Colors.transparent,
+          child: Column(children: [
+            for (var i = 0; i < rows.length; i++) ...[
+              if (i > 0) const Divider(height: 1, thickness: 1, indent: 66, color: T.hairline),
+              rows[i],
+            ],
+          ]),
+        ),
+      );
+
   /// การแจ้งเตือน row with the unread badge.
   Widget _notificationsRow(BuildContext context) {
     final unread = context.watch<NotificationState>().unreadCount;
     return InkWell(
       onTap: () => Navigator.of(context)
           .push(MaterialPageRoute(builder: (_) => const NotificationsScreen())),
-      borderRadius: BorderRadius.circular(T.rCard),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+        padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 12),
         child: Row(
           children: [
-            const HexIcon(icon: Icons.notifications_rounded, size: 34, color: T.textSecondary),
+            const Icon3D(Ic3.bell, size: 40),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
@@ -234,37 +270,43 @@ class MenuScreen extends StatelessWidget {
     ));
   }
 
+  /// The web's actual referral rule: each friend who redeems your code gives you Pro days
+  /// (`referrer_pro_days`) and coins (`referrer_coins`) — no invented multi-friend target.
   Widget _referralPromoRow(BuildContext context, L10n l, MemberState member) {
-    final done = member.referralQualified.clamp(0, member.referralTarget);
+    final done = member.referralQualified;
+    final coins = member.referralSignupCoins;
     return GestureDetector(
       onTap: () =>
           Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EarnCoinsScreen())),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
           gradient: const LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [Color(0x33FF2D55), Color(0x22B026FF)],
           ),
-          borderRadius: BorderRadius.circular(T.rCard),
+          borderRadius: BorderRadius.circular(18),
           border: Border.all(color: T.accentGlow),
         ),
         child: Row(
           children: [
-            const HexIcon(icon: Icons.workspace_premium_rounded, size: 34),
+            const Icon3D(Ic3.friends, size: 46, tile: false),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    l.pick('ชวนครบ ${member.referralTarget} คน รับ Pro ฟรี ${member.referralRewardMonths} เดือน',
-                        'Invite ${member.referralTarget} — ${member.referralRewardMonths} months Pro free'),
+                    l.pick('ชวนเพื่อน 1 คน รับ Pro ฟรี ${Format.humanDays(member.inviterProDays)}',
+                        'Invite a friend — ${Format.humanDays(member.inviterProDays, thai: false)} of Pro free'),
                     style: AppTheme.body(13.5, weight: FontWeight.w700, color: T.textPrimary),
                   ),
-                  Text(l.pick('ชวนแล้ว $done/${member.referralTarget} คน', '$done/${member.referralTarget} invited'),
-                      style: AppTheme.body(11.5, color: T.accent)),
+                  Text(
+                      coins > 0
+                          ? l.pick('+$coins เหรียญต่อเพื่อน · ชวนแล้ว $done คน', '+$coins coins per friend · $done invited')
+                          : l.pick('ชวนแล้ว $done คน', '$done invited'),
+                      style: AppTheme.body(11.5, color: T.accentHi)),
                 ],
               ),
             ),
@@ -281,11 +323,12 @@ class MenuScreen extends StatelessWidget {
 
     if (!member.isLoggedIn) {
       return GlassCard(
+        radius: 20,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(children: [
-              const HexAvatar(size: 46, child: Icon(Icons.person_outline_rounded, color: T.accentHi, size: 22)),
+              const Icon3D(Ic3.gift, size: 52, tile: false),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -298,8 +341,9 @@ class MenuScreen extends StatelessWidget {
                             ? l.pick(
                                 'สมัครใหม่รับ Premium ฟรี ${Format.humanDays(member.signupFreeProDays)}! 🎁',
                                 'Sign up — free Premium for ${Format.humanDays(member.signupFreeProDays, thai: false)}! 🎁')
-                            : l.pick('เข้าสู่ระบบครั้งแรก รับ 10 เหรียญฟรี', 'Sign in — 10 free coins'),
-                        style: AppTheme.body(11.5, color: T.accent)),
+                            : l.pick('เข้าสู่ระบบครั้งแรก รับ ${member.signupBonusCoins} เหรียญฟรี',
+                                'Sign in — ${member.signupBonusCoins} free coins'),
+                        style: AppTheme.body(11.5, color: T.accentHi)),
                   ],
                 ),
               ),
@@ -313,7 +357,7 @@ class MenuScreen extends StatelessWidget {
                 child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                   const Icon(Icons.login_rounded, size: 18, color: T.onAccent),
                   const SizedBox(width: 8),
-                  Text(l.pick('เข้าสู่ระบบ', 'Sign in'),
+                  Text(l.pick('เข้าสู่ระบบ / สมัครฟรี', 'Sign in / Sign up free'),
                       style: AppTheme.body(14, weight: FontWeight.w700, color: T.onAccent)),
                 ]),
               ),
@@ -326,6 +370,7 @@ class MenuScreen extends StatelessWidget {
     final m = member.member!;
     final pro = member.isPro;
     return GlassCard(
+      radius: 20,
       child: Row(
         children: [
           const HexAvatar(size: 52, child: Icon(Icons.person, color: T.accentHi, size: 24)),
@@ -334,7 +379,10 @@ class MenuScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(m.name, style: AppTheme.body(15, weight: FontWeight.w700, color: T.textPrimary)),
+                Text(m.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTheme.body(15, weight: FontWeight.w700, color: T.textPrimary)),
                 Text('${m.provider.toUpperCase()} · ${pro ? l.pick('แผน Pro', 'Pro') : l.pick('แผนฟรี', 'Free')}',
                     style: AppTheme.body(12, color: T.textMuted)),
               ],
@@ -342,6 +390,7 @@ class MenuScreen extends StatelessWidget {
           ),
           if (pro) const Pill(text: 'PRO', filled: true),
           IconButton(
+            tooltip: l.pick('ออกจากระบบ', 'Sign out'),
             onPressed: () => member.logout(),
             icon: const Icon(Icons.logout_rounded, size: 18, color: T.textFaint),
           ),
@@ -355,17 +404,21 @@ class MenuScreen extends StatelessWidget {
     return GestureDetector(
       onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EarnCoinsScreen())),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(color: T.accentSoft, borderRadius: BorderRadius.circular(T.rCard)),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: T.accentSoft,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: const Color(0x33FF6B85)),
+        ),
         child: Row(
           children: [
-            const HexIcon(icon: Icons.monetization_on_rounded, size: 34),
+            const Icon3D(Ic3.coins, size: 44, tile: false),
             const SizedBox(width: 12),
             Expanded(
               child: Text(l.bi('เหรียญของฉัน', 'My coins'),
                   style: AppTheme.body(14, weight: FontWeight.w600, color: T.textPrimary)),
             ),
-            Text('${member.coins}',
+            Text(Format.grouped(member.coins),
                 style: AppTheme.display(18, weight: FontWeight.w700, color: T.accent)),
             const SizedBox(width: 8),
             Container(
@@ -381,20 +434,20 @@ class MenuScreen extends StatelessWidget {
   }
 
   Widget _languageRow(BuildContext context, AppState app) {
-    final l = app.l;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: T.accentSoft,
-        borderRadius: BorderRadius.circular(T.rCard),
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       child: Row(
         children: [
-          const HexIcon(icon: Icons.translate_rounded, size: 34),
-          const SizedBox(width: 12),
+          const Icon3D(Ic3.language, size: 40),
+          const SizedBox(width: 14),
           Expanded(
-            child: Text(l.bi('ภาษา', 'Language'),
-                style: AppTheme.body(14, weight: FontWeight.w600, color: T.textPrimary)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('ภาษา', style: AppTheme.body(14, weight: FontWeight.w600, color: T.textPrimary)),
+                Text('Language', style: AppTheme.body(11, color: T.textFaint)),
+              ],
+            ),
           ),
           _segToggle(context, app),
         ],
@@ -430,15 +483,14 @@ class MenuScreen extends StatelessWidget {
     );
   }
 
-  Widget _row(BuildContext context, IconData icon, String th, String en, {VoidCallback? onTap, String? value}) {
+  Widget _row(BuildContext context, Ic3 icon, String th, String en, {VoidCallback? onTap, String? value}) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(T.rCard),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+        padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 12),
         child: Row(
           children: [
-            HexIcon(icon: icon, size: 34, color: T.textSecondary),
+            Icon3D(icon, size: 40),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
@@ -458,22 +510,30 @@ class MenuScreen extends StatelessWidget {
     );
   }
 
-  Widget _upgradeBanner(BuildContext context, L10n l) {
+  Widget _upgradeBanner(BuildContext context, L10n l, MemberState member) {
     return GestureDetector(
       onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const GoProScreen())),
       child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(gradient: T.accentGradient, borderRadius: BorderRadius.circular(T.rCard)),
+        padding: const EdgeInsets.fromLTRB(12, 10, 16, 10),
+        decoration: BoxDecoration(
+          gradient: T.accentGradient,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: const [BoxShadow(color: T.accentGlow, blurRadius: 26, offset: Offset(0, 12), spreadRadius: -12)],
+        ),
         child: Row(
           children: [
+            const Icon3D(Ic3.crown, size: 56, tile: false),
+            const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(l.pick('อัปเกรดเป็น Pro', 'Go Pro'),
                       style: AppTheme.display(16, weight: FontWeight.w700, color: T.onAccent)),
-                  Text(l.pick('รับชมแบบไม่มีโฆษณา · ฿129/เดือน', 'Ad-free viewing · ฿129/mo'),
-                      style: AppTheme.body(12, color: Color(0xCC2A1C05))),
+                  Text(
+                      l.pick('รับชมแบบไม่มีโฆษณา · ฿${member.proPriceThb}/เดือน',
+                          'Ad-free viewing · ฿${member.proPriceThb}/mo'),
+                      style: AppTheme.body(12, color: const Color(0xE6FFFFFF))),
                 ],
               ),
             ),
@@ -489,15 +549,15 @@ class MenuScreen extends StatelessWidget {
     String two(int n) => n.toString().padLeft(2, '0');
     final untilText = until == null ? null : '${two(until.day)}/${two(until.month)}/${until.year}';
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(12, 10, 16, 10),
       decoration: BoxDecoration(
         color: T.accentSoft,
-        borderRadius: BorderRadius.circular(T.rCard),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: T.accentGlow),
       ),
       child: Row(
         children: [
-          const HexIcon(icon: Icons.verified_rounded, size: 38),
+          const Icon3D(Ic3.crown, size: 52, tile: false),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -519,7 +579,7 @@ class MenuScreen extends StatelessWidget {
   // Custom About dialog — deliberately NOT showAboutDialog, which injects a
   // "View licenses" button (the open-source license page) we don't want users
   // to see.
-  void _about(BuildContext context, L10n l) => showDialog<void>(
+  void _about(BuildContext context, L10n l, MemberState member) => showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
           backgroundColor: T.screen,
@@ -533,8 +593,8 @@ class MenuScreen extends StatelessWidget {
               const SizedBox(height: 12),
               Text(
                 l.pick(
-                  'สำหรับการรับชมส่วนตัวเท่านั้น ทุกเรื่องดูฟรี · Pro 129฿ เพื่อรับชมแบบไม่มีโฆษณา',
-                  'For personal viewing only. Everything is free · Pro 129฿ for ad-free.',
+                  'สำหรับการรับชมส่วนตัวเท่านั้น · Pro ${member.proPriceThb}฿ เพื่อรับชมแบบไม่มีโฆษณา',
+                  'For personal viewing only · Pro ${member.proPriceThb}฿ for ad-free.',
                 ),
                 style: AppTheme.body(12.5, color: T.textSecondary),
               ),

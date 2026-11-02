@@ -211,8 +211,12 @@ class NetwixApi {
   /// episode isn't mirrored yet ("preparing").
   Future<NetwixSource?> resolveSource(int episodeId) async {
     try {
+      // X-NetWix-Guest-Quota: this build shows the sign-up prompt, so the server may hold a guest
+      // to the web's free-episode quota (older builds without the header are left ungated).
       final r = await _dio.get('/episodes/$episodeId/source',
-          options: Options(headers: _opts.headers, validateStatus: (s) => s != null && s < 500));
+          options: Options(
+              headers: {..._opts.headers!, 'X-NetWix-Guest-Quota': '1'},
+              validateStatus: (s) => s != null && s < 500));
       final b = r.data;
       final data = (b is Map && b['data'] is Map) ? (b['data'] as Map).cast<String, dynamic>() : null;
       if (data == null) return const NetwixSource(ready: false);
@@ -344,6 +348,32 @@ class NetwixApi {
           options: Options(headers: _opts.headers, validateStatus: (s) => s != null && s < 500));
     } catch (e) {
       if (kDebugMode) debugPrint('netwix sendTelemetry: $e');
+    }
+  }
+
+  /// The member's contact details — the record the web edits on /account/settings.
+  Future<AccountContact?> fetchAccount() async {
+    try {
+      final d = _data(await _dio.get('/account', options: _opts));
+      return d == null ? null : AccountContact.fromJson(d);
+    } catch (e) {
+      if (kDebugMode) debugPrint('netwix fetchAccount: $e');
+      return null;
+    }
+  }
+
+  /// Save contact details (same limits as the web form). Null on any failure — the
+  /// screen validates first and shows its own Thai/English message.
+  Future<AccountContact?> updateAccount({required String name, String? phone, String? address}) async {
+    try {
+      final r = await _dio.post('/account',
+          data: {'name': name, 'phone': phone, 'address': address},
+          options: Options(headers: _opts.headers, validateStatus: (s) => s != null && s < 500));
+      final d = _data(r);
+      return d == null ? null : AccountContact.fromJson(d);
+    } catch (e) {
+      if (kDebugMode) debugPrint('netwix updateAccount: $e');
+      return null;
     }
   }
 
@@ -1001,6 +1031,24 @@ class NetwixDetail {
   final List<Content> related;
 }
 
+/// Contact details shared with the web's account settings page.
+class AccountContact {
+  const AccountContact({required this.name, this.email, this.phone, this.address, this.provider});
+  final String name;
+  final String? email;
+  final String? phone;
+  final String? address;
+  final String? provider;
+
+  factory AccountContact.fromJson(Map<String, dynamic> j) => AccountContact(
+        name: '${j['name'] ?? ''}',
+        email: j['email'] as String?,
+        phone: j['phone'] as String?,
+        address: j['address'] as String?,
+        provider: j['provider'] as String?,
+      );
+}
+
 class NetwixSource {
   const NetwixSource({required this.ready, this.kind, this.url, this.error});
   final bool ready;
@@ -1018,6 +1066,9 @@ class NetwixSource {
 
   /// Blocked behind a purchase rather than a temporary mirroring delay.
   bool get isLocked => error == 'pro_required' || error == 'vip_required';
+
+  /// A guest past the admin's free-episode quota — the web asks them to sign up here too.
+  bool get needsSignup => error == 'signup_required';
 
   /// The source is gone upstream — retrying will never help.
   bool get isGone => error == 'no_source';
