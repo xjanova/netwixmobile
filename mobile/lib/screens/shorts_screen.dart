@@ -1,17 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../l10n/l10n.dart';
 import '../models/content.dart';
 import '../services/netwix_api.dart';
 import '../state/app_state.dart';
-import '../state/member_state.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../widgets/floating_nav.dart';
 import '../widgets/poster_card.dart';
 import '../widgets/poster_image.dart';
+import '../widgets/social_rail.dart';
 import 'playback_screen.dart';
 
 /// ดูสั้น — the vertical dramas as a full-screen swipe feed: one title per page, swipe up for the
@@ -106,23 +105,6 @@ class _ShortsScreenState extends State<ShortsScreen> {
     ));
   }
 
-  Future<void> _share(Content c) async {
-    final l = context.read<AppState>().l;
-    final member = context.read<MemberState>();
-    final invite = member.isLoggedIn ? '\nสมัครฟรี / Sign up: ${member.shareLink}' : '';
-    final shared = await SharePlus.instance.share(ShareParams(
-      text: l.pick('ดู "${c.title}" ฟรีบน NetWix 🎬\n${NetwixApi.titleUrl(c.slug)}',
-              'Watch "${c.title}" free on NetWix 🎬\n${NetwixApi.titleUrl(c.slug)}') +
-          invite,
-    ));
-    if (shared.status != ShareResultStatus.success || !mounted) return;
-    final got = await context.read<MemberState>().awardShare();
-    if (got > 0 && mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('+$got ${l.pick('เหรียญ', 'coins')} 🪙')));
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final l = context.watch<AppState>().l;
@@ -199,14 +181,14 @@ class _ShortsScreenState extends State<ShortsScreen> {
             ),
           ),
         ),
-        // Side actions.
+        // Side actions: like · comment · share (same rows as the web), then details.
         Positioned(
           right: 12,
           bottom: kNavClearance + 96,
           child: Column(children: [
+            SocialRail(content: c, gap: 16),
+            const SizedBox(height: 16),
             _action(Icons.info_outline_rounded, l.pick('รายละเอียด', 'Details'), () => openContent(context, c)),
-            const SizedBox(height: 18),
-            _action(Icons.reply_rounded, l.pick('แชร์', 'Share'), () => _share(c), mirror: true),
           ]),
         ),
         // Title block.
@@ -275,9 +257,8 @@ class _ShortsScreenState extends State<ShortsScreen> {
     );
   }
 
-  Widget _action(IconData icon, String label, VoidCallback onTap, {bool mirror = false}) {
-    Widget glyph = Icon(icon, size: 24, color: Colors.white);
-    if (mirror) glyph = Transform.flip(flipX: true, child: glyph);
+  Widget _action(IconData icon, String label, VoidCallback onTap) {
+    final glyph = Icon(icon, size: 24, color: Colors.white);
     return GestureDetector(
       onTap: onTap,
       child: Column(children: [

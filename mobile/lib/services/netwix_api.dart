@@ -654,8 +654,9 @@ class NetwixApi {
   // server 401s a guest, which surfaces here as a null return — callers gate on
   // login first and treat null as "offline/declined, keep local state".
 
-  /// Per-title interaction state for the detail screen (liked / in-list / my
-  /// rating + counts). Token-only — returns null for guests or on failure.
+  /// Per-title interaction state (liked / in-list / my rating + counts). The
+  /// counts are public; a member token adds their own flags (a guest gets
+  /// liked=false). Null on failure.
   Future<ContentState?> fetchContentState(int contentId) async {
     try {
       final d = _data(await _dio.get('/content/$contentId/state', options: _opts));
@@ -713,18 +714,24 @@ class NetwixApi {
   }
 
   /// Comments for a title (public read; newest first). Empty list on failure.
-  Future<List<Comment>> fetchComments(int contentId) async {
+  Future<List<Comment>> fetchComments(int contentId) async =>
+      (await fetchCommentList(contentId))?.items ?? const [];
+
+  /// Comments plus the title's total (the list itself is capped server-side).
+  /// Null on failure, so the sheet can tell "no comments" from "offline".
+  Future<({List<Comment> items, int count})?> fetchCommentList(int contentId) async {
     try {
       final d = _data(await _dio.get('/content/$contentId/comments', options: _opts));
       final items = d?['items'];
-      if (items is! List) return const [];
-      return items
+      if (items is! List) return null;
+      final list = items
           .whereType<Map>()
           .map((m) => Comment.fromJson(m.cast<String, dynamic>()))
           .toList();
+      return (items: list, count: (d?['count'] as num?)?.toInt() ?? list.length);
     } catch (e) {
       if (kDebugMode) debugPrint('netwix comments($contentId): $e');
-      return const [];
+      return null;
     }
   }
 

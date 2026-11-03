@@ -46,6 +46,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
   // Social (netwix.online-backed via /api/app/content/{id}/*). Optimistic UI,
   // reconciled with the server-authoritative counts when the call returns.
   bool _liked = false;
+  bool _liking = false;
   int _likes = 0;
   bool _inList = false;
   int? _myRating; // 1..5, null = not yet rated by this member
@@ -61,11 +62,11 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
     _load();
   }
 
-  /// Hydrate like / my-list / rating from the server. Members get their full
-  /// per-title state in one call; guests still see the public rating summary.
+  /// Hydrate like / my-list / rating from the server. `/state` answers guests
+  /// too (counts only); the rating summary is the fallback if it fails.
   Future<void> _loadState() async {
     final api = context.read<NetwixApi>();
-    if (context.read<MemberState>().isLoggedIn) {
+    {
       final st = await api.fetchContentState(c.id);
       if (!mounted) return;
       if (st != null) {
@@ -99,26 +100,40 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
   }
 
   Future<void> _toggleLike() async {
+    if (_liking) return;
     // Grab the app-lifetime providers up front so we don't touch `context`
     // after the sign-in / network awaits.
     final api = context.read<NetwixApi>();
     final member = context.read<MemberState>();
     if (!await _requireLogin()) return;
-    final becameLiked = !_liked;
+    if (!mounted) return;
+    final was = _liked;
     setState(() {
-      _liked = becameLiked;
-      _likes = (_likes + (becameLiked ? 1 : -1)).clamp(0, 1 << 31);
+      _liking = true;
+      _liked = !was;
+      _likes = (_likes + (was ? -1 : 1)).clamp(0, 1 << 31);
     });
     final res = await api.toggleLike(c.id);
     if (!mounted) return;
-    if (res != null) {
-      setState(() {
+    setState(() {
+      _liking = false;
+      if (res != null) {
         _liked = res.liked;
         _likes = res.likesCount;
-      });
+      } else {
+        // Not saved — put the heart back the way the server still has it.
+        _liked = was;
+        _likes = (_likes + (was ? 1 : -1)).clamp(0, 1 << 31);
+      }
+    });
+    if (res == null) {
+      final l = context.read<AppState>().l;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(l.pick('กดถูกใจไม่สำเร็จ ตรวจสอบอินเทอร์เน็ตแล้วลองใหม่', 'Could not like — check your connection'))));
+      return;
     }
     // Coins only when turning a like ON (server + daily cap prevent farming).
-    if (becameLiked) {
+    if (res.liked) {
       final got = await member.awardLike();
       if (got > 0 && mounted) _coinToast(got);
     }
