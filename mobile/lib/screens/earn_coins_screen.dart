@@ -13,6 +13,7 @@ import '../state/member_state.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../widgets/ambient_backdrop.dart';
+import '../widgets/floating_nav.dart';
 import '../widgets/icon3d.dart';
 import '../widgets/referral_promo_card.dart';
 import 'catalog_grid_screen.dart';
@@ -80,7 +81,7 @@ class _EarnCoinsScreenState extends State<EarnCoinsScreen> {
           onRefresh: _refresh,
           child: ListView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+            padding: EdgeInsets.fromLTRB(16, 8, 16, embedded ? kNavClearance : 28),
             children: [
               _hero(context, l, member),
               const SizedBox(height: 16),

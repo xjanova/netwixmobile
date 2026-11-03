@@ -13,7 +13,11 @@ import '../state/notification_state.dart';
 import '../theme/app_theme.dart';
 import '../theme/hex.dart';
 import '../theme/tokens.dart';
+import '../services/format.dart';
 import '../widgets/common.dart';
+import '../widgets/floating_nav.dart';
+import '../widgets/icon3d.dart';
+import '../widgets/netwix_wordmark.dart';
 import '../widgets/poster_card.dart';
 import '../widgets/poster_image.dart';
 import '../widgets/promo_banner_carousel.dart';
@@ -87,6 +91,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
   Widget build(BuildContext context) {
     final l = context.watch<AppState>().l;
     final catalog = context.watch<CatalogState>();
+    final hero = catalog.hero ?? (catalog.featured.isNotEmpty ? catalog.featured.first : null);
 
     return RefreshIndicator(
       color: T.accent,
@@ -96,57 +101,359 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
         await _loadContinue();
       },
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
+        padding: const EdgeInsets.only(bottom: kNavClearance),
         children: [
-          _greeting(l),
-          const SizedBox(height: 16),
-          // Admin-controlled promo banners (campaigns like "สมัครใหม่รับฟรีโปร").
-          const PromoBannerCarousel(),
-          _searchField(l),
-          const SizedBox(height: 16),
-          _chips(catalog),
-          const SizedBox(height: 20),
-          if (_continue.isNotEmpty) ...[
-            _continueSection(l),
-            const SizedBox(height: 24),
-          ],
-          if (catalog.loading && catalog.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 60),
-              child: Center(child: CircularProgressIndicator(color: T.accent)),
-            )
-          else if (catalog.error != null && catalog.isEmpty)
-            _errorBox(l, catalog)
-          else ...[
-            // When a category chip is active (e.g. อนิเมะ), lead with that category's
-            // newest titles — every category gets its own มาใหม่ rail, like ทั้งหมด.
-            if (!catalog.current.isAll)
-              _rail(
-                l,
-                '${l.pick('มาใหม่', 'New arrivals')} 🔥 · ${catalog.current.label(l.isTh)}',
-                catalog.newestInCurrent,
-                badge: catalog.current.id == 'vertical'
-                    ? const Pill(text: 'ดูฟรี', filled: true)
-                    : const Pill(text: 'NEW', filled: true),
-                loading: catalog.filterLoading,
-              ),
-            // มาใหม่ + ดาวเยอะ lead the page (computed from the full catalogue).
-            if (catalog.current.isAll) ...[
-              if (catalog.newest.isNotEmpty)
-                _rail(l, l.pick('มาใหม่ 🔥', 'New arrivals 🔥'), catalog.newest,
-                    badge: const Pill(text: 'NEW', filled: true)),
-              if (catalog.topRated.isNotEmpty)
-                _rail(l, l.pick('เรตติ้งสูง ⭐', 'Top rated ⭐'), catalog.topRated),
-            ],
-            // The web's curated home rails (trending + genres, incl. anime).
-            for (final r in catalog.rails)
-              if (r.items.isNotEmpty) _rail(l, r.title, r.items),
-            // Fallback when the backend sent no rails (offline / older API).
-            if (catalog.rails.isEmpty && catalog.current.isAll)
-              _rail(l, l.bi('ยอดนิยม', 'Popular'), catalog.featured),
-          ],
+          if (hero != null)
+            _hero(l, hero)
+          else
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 8, 18, 0),
+              child: Column(children: [_greeting(l), const SizedBox(height: 16), _searchField(l)]),
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _chips(catalog),
+                const SizedBox(height: 18),
+                // Admin-controlled promo banners (campaigns like "สมัครใหม่รับฟรีโปร").
+                const PromoBannerCarousel(),
+                if (_continue.isNotEmpty) ...[
+                  _continueSection(l),
+                  const SizedBox(height: 24),
+                ],
+                if (catalog.loading && catalog.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 60),
+                    child: Center(child: CircularProgressIndicator(color: T.accent)),
+                  )
+                else if (catalog.error != null && catalog.isEmpty)
+                  _errorBox(l, catalog)
+                else ...[
+                  // When a category chip is active (e.g. อนิเมะ), lead with that category's
+                  // newest titles — every category gets its own มาใหม่ rail, like ทั้งหมด.
+                  if (!catalog.current.isAll)
+                    _rail(
+                      l,
+                      '${l.pick('มาใหม่', 'New arrivals')} 🔥 · ${catalog.current.label(l.isTh)}',
+                      catalog.newestInCurrent,
+                      badge: catalog.current.id == 'vertical'
+                          ? const Pill(text: 'ดูฟรี', filled: true)
+                          : const Pill(text: 'NEW', filled: true),
+                      loading: catalog.filterLoading,
+                    ),
+                  // มาใหม่ + ดาวเยอะ lead the page (computed from the full catalogue).
+                  if (catalog.current.isAll) ...[
+                    if (catalog.newest.isNotEmpty)
+                      _rail(l, l.pick('มาใหม่ 🔥', 'New arrivals 🔥'), catalog.newest,
+                          badge: const Pill(text: 'NEW', filled: true)),
+                    if (catalog.topRated.isNotEmpty)
+                      _rail(l, l.pick('เรตติ้งสูง ⭐', 'Top rated ⭐'), catalog.topRated),
+                  ],
+                  // The web's curated home rails (trending + genres, incl. anime). The first one is
+                  // the web's trending list, so it gets the numbered top-10 treatment.
+                  for (final (i, r) in catalog.rails.indexed)
+                    if (r.items.isNotEmpty)
+                      i == 0 && catalog.current.isAll ? _rankedRail(l, r.title, r.items) : _rail(l, r.title, r.items),
+                  // Fallback when the backend sent no rails (offline / older API).
+                  if (catalog.rails.isEmpty && catalog.current.isAll)
+                    _rail(l, l.bi('ยอดนิยม', 'Popular'), catalog.featured),
+                ],
+              ],
+            ),
+          ),
         ],
       ),
+    );
+  }
+
+  /// Full-bleed billboard for the web's featured title, with the app bar laid over it.
+  Widget _hero(L10n l, Content c) {
+    final unread = context.watch<NotificationState>().unreadCount;
+    final member = context.watch<MemberState>();
+    final meta = [
+      c.typeThai,
+      if (c.genres.isNotEmpty) c.genres.first,
+      if (c.type != 'movie' && c.episodesCount > 0) '${c.episodesCount} ตอน',
+      if (c.yearText.isNotEmpty) c.yearText,
+    ].join(' · ');
+    return SizedBox(
+      height: 470,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          GestureDetector(
+            onTap: () => openContent(context, c),
+            child: PosterImage(
+              url: c.heroImageUrl,
+              seed: c.id,
+              radius: 0,
+              memCacheWidth: 1080,
+              title: c.title,
+              healContentId: c.id,
+            ),
+          ),
+          const IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xBF0B0712), Color(0x000B0712), Color(0x000B0712), Color(0xD90B0712), T.screen],
+                  stops: [0, 0.22, 0.45, 0.8, 1],
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 10,
+            left: 16,
+            right: 16,
+            child: Row(
+              children: [
+                const NetwixWordmark(height: 24),
+                const Spacer(),
+                if (member.isLoggedIn) ...[
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(5, 4, 10, 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0x9E140E20),
+                      borderRadius: BorderRadius.circular(100),
+                      border: Border.all(color: const Color(0x1FFFFFFF)),
+                    ),
+                    child: Row(children: [
+                      const Icon3D(Ic3.coins, size: 22, tile: false),
+                      const SizedBox(width: 4),
+                      Text(Format.grouped(member.coins),
+                          style: AppTheme.body(12.5, weight: FontWeight.w600, color: T.textPrimary)),
+                    ]),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                _roundButton(Icons.search_rounded, l.pick('ค้นหา', 'Search'), widget.onOpenExplore),
+                const SizedBox(width: 8),
+                _roundButton(
+                  Icons.notifications_none_rounded,
+                  l.pick('การแจ้งเตือน', 'Notifications'),
+                  () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NotificationsScreen())),
+                  dot: unread > 0,
+                ),
+              ],
+            ),
+          ),
+          Positioned(
+            left: 18,
+            right: 18,
+            bottom: 14,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                    decoration: BoxDecoration(gradient: T.accentGradient, borderRadius: BorderRadius.circular(100)),
+                    child: Text(l.pick('แนะนำวันนี้', 'Featured'),
+                        style: AppTheme.body(11, weight: FontWeight.w600, color: T.onAccent)),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(meta,
+                        maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTheme.body(12, color: T.textSecondary)),
+                  ),
+                ]),
+                const SizedBox(height: 8),
+                Text(c.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTheme.display(26, weight: FontWeight.w700, color: Colors.white)),
+                const SizedBox(height: 12),
+                Row(children: [
+                  Expanded(
+                    child: _heroButton(
+                      icon: Icons.play_arrow_rounded,
+                      label: l.pick('ดูเลย', 'Watch'),
+                      primary: true,
+                      busy: _openingHero,
+                      onTap: () => _watchHero(c),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _heroButton(
+                      icon: Icons.info_outline_rounded,
+                      label: l.pick('รายละเอียด', 'Details'),
+                      onTap: () => openContent(context, c),
+                    ),
+                  ),
+                ]),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  bool _openingHero = false;
+
+  /// Straight into episode 1 for an open title; locked ones (VIP / 18+ / Pro) and titles without an
+  /// episode list go through the detail page, which runs the unlock flow.
+  Future<void> _watchHero(Content c) async {
+    if (_openingHero) return;
+    if (c.isVip || c.isAdult || c.requiresPro) {
+      openContent(context, c);
+      return;
+    }
+    setState(() => _openingHero = true);
+    final detail = await context.read<NetwixApi>().fetchDetail(c.slug);
+    if (!mounted) return;
+    setState(() => _openingHero = false);
+    final eps = detail?.episodes ?? const [];
+    if (eps.isEmpty) {
+      openContent(context, c);
+      return;
+    }
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => PlaybackScreen(content: c, episodes: eps, startEpisodeId: eps.first.id),
+    ));
+  }
+
+  Widget _roundButton(IconData icon, String label, VoidCallback? onTap, {bool dot = false}) {
+    return Semantics(
+      button: true,
+      label: label,
+      excludeSemantics: true,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: const Color(0x9E140E20),
+            shape: BoxShape.circle,
+            border: Border.all(color: const Color(0x1FFFFFFF)),
+          ),
+          child: Stack(alignment: Alignment.center, children: [
+            Icon(icon, size: 20, color: T.textPrimary),
+            if (dot)
+              Positioned(
+                top: 8,
+                right: 9,
+                child: Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: T.accent,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: const Color(0xFF1A1228), width: 1.5),
+                  ),
+                ),
+              ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _heroButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    bool primary = false,
+    bool busy = false,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 46,
+        decoration: BoxDecoration(
+          gradient: primary ? T.accentGradient : null,
+          color: primary ? null : const Color(0x1AFFFFFF),
+          borderRadius: BorderRadius.circular(T.rButton),
+          border: primary ? null : Border.all(color: const Color(0x29FFFFFF)),
+          boxShadow: primary
+              ? const [BoxShadow(color: T.accentGlow, blurRadius: 26, offset: Offset(0, 12), spreadRadius: -10)]
+              : null,
+        ),
+        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          if (busy)
+            const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+          else
+            Icon(icon, size: 20, color: Colors.white),
+          const SizedBox(width: 6),
+          Text(label, style: AppTheme.body(14.5, weight: primary ? FontWeight.w600 : FontWeight.w500, color: Colors.white)),
+        ]),
+      ),
+    );
+  }
+
+  /// Top-10 rail: a big outlined rank number tucked behind each poster.
+  Widget _rankedRail(L10n l, String title, List<Content> items) {
+    final numberStyle = AppTheme.display(92, weight: FontWeight.w700);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionHeader(
+          title: title,
+          trailing: l.pick('ทั้งหมด ›', 'See all ›'),
+          onTrailingTap: widget.onOpenExplore,
+        ),
+        SizedBox(
+          height: 168,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: items.length.clamp(0, 10),
+            separatorBuilder: (_, _) => const SizedBox(width: 6),
+            itemBuilder: (_, i) {
+              final c = items[i];
+              return GestureDetector(
+                onTap: () => openContent(context, c),
+                child: SizedBox(
+                  width: i == 9 ? 170 : 148,
+                  child: Stack(
+                    children: [
+                      Positioned(
+                        left: 0,
+                        bottom: -10,
+                        child: Text(
+                          '${i + 1}',
+                          style: TextStyle(
+                            fontFamily: numberStyle.fontFamily,
+                            fontFamilyFallback: numberStyle.fontFamilyFallback,
+                            fontSize: 92,
+                            fontWeight: FontWeight.w700,
+                            height: 1,
+                            foreground: Paint()
+                              ..style = PaintingStyle.stroke
+                              ..strokeWidth = 2.4
+                              ..color = T.accent,
+                            shadows: const [Shadow(color: Color(0x73FF2D55), blurRadius: 22)],
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        right: 0,
+                        top: 0,
+                        bottom: 8,
+                        width: 104,
+                        child: PosterImage(
+                          url: c.displayImageUrl,
+                          seed: c.id,
+                          radius: 12,
+                          title: c.title,
+                          healContentId: c.id,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 24),
+      ],
     );
   }
 
