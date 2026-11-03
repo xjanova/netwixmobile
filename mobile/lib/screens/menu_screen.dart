@@ -11,6 +11,7 @@ import '../theme/hex.dart';
 import '../theme/tokens.dart';
 import '../state/notification_state.dart';
 import '../widgets/common.dart';
+import '../widgets/floating_nav.dart';
 import '../widgets/icon3d.dart';
 import '../widgets/login_sheet.dart';
 import 'account_settings_screen.dart';
@@ -37,7 +38,7 @@ class MenuScreen extends StatelessWidget {
     final effectivePro = member.isPro;
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, kNavClearance),
       children: [
         Text(l.bi('เมนู', 'Menu'), style: AppTheme.display(21, weight: FontWeight.w700)),
         const SizedBox(height: 16),

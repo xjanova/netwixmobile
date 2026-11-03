@@ -7,6 +7,7 @@ import '../state/catalog_state.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../widgets/common.dart';
+import '../widgets/floating_nav.dart';
 import '../widgets/poster_card.dart';
 
 /// Explore · สำรวจ — full searchable catalog grid.
@@ -129,7 +130,7 @@ class _CatalogGridScreenState extends State<CatalogGridScreen> {
                             return false;
                           },
                           child: GridView.builder(
-                            padding: const EdgeInsets.fromLTRB(18, 4, 18, 24),
+                            padding: const EdgeInsets.fromLTRB(18, 4, 18, kNavClearance),
                             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                               crossAxisCount: 3,
                               crossAxisSpacing: 12,

@@ -5,16 +5,16 @@ import 'package:provider/provider.dart';
 import '../l10n/l10n.dart';
 import '../services/app_navigation.dart';
 import '../state/app_state.dart';
-import '../theme/app_theme.dart';
-import '../theme/hex.dart';
 import '../theme/tokens.dart';
+import '../widgets/floating_nav.dart';
 import '../widgets/update_sheet.dart';
 import 'catalog_grid_screen.dart';
 import 'earn_coins_screen.dart';
 import 'home_screen.dart';
 import 'menu_screen.dart';
+import 'shorts_screen.dart';
 
-/// Root shell: bottom tab bar hosting Home / Explore / Menu.
+/// Root shell: the floating tab bar hosting Home / Explore / Shorts / Coins / Profile.
 /// Runs a silent auto-update check on first launch.
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
@@ -66,6 +66,8 @@ class _AppShellState extends State<AppShell> {
 
   Widget _buildShell(BuildContext context, L10n l) {
     return Scaffold(
+      // The bar floats: pages scroll underneath it and leave kNavClearance at their end.
+      extendBody: true,
       body: DecoratedBox(
         decoration: T.screenBackground,
         child: SafeArea(
@@ -75,131 +77,27 @@ class _AppShellState extends State<AppShell> {
             children: [
               HomeScreen(onOpenExplore: () => setState(() => _index = 1)),
               const CatalogGridScreen(),
+              ShortsScreen(active: _index == 2),
               const EarnCoinsScreen(embedded: true),
               const MenuScreen(),
             ],
           ),
         ),
       ),
-      bottomNavigationBar: _BottomNav(
+      bottomNavigationBar: FloatingNavBar(
         index: _index,
+        centerIndex: 2,
         onTap: (i) => setState(() => _index = i),
         items: [
-          _NavItem(Icons.home_rounded, l.pick('หน้าแรก', 'Home')),
-          _NavItem(Icons.travel_explore_rounded, l.pick('สำรวจ', 'Explore')),
-          _NavItem(Icons.monetization_on_rounded, l.pick('หาเหรียญ', 'Coins')),
-          _NavItem(Icons.menu_rounded, l.pick('เมนู', 'Menu')),
-        ],
-      ),
-    );
-  }
-}
-
-class _NavItem {
-  const _NavItem(this.icon, this.label);
-  final IconData icon;
-  final String label;
-}
-
-class _BottomNav extends StatelessWidget {
-  const _BottomNav({required this.index, required this.onTap, required this.items});
-  final int index;
-  final ValueChanged<int> onTap;
-  final List<_NavItem> items;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        // Was a flat warm-dark fill (0E0B07) on a cool near-black theme — subtly off-brand and
-        // completely flat. A short vertical gradient plus a lifted top hairline reads as a bar
-        // sitting ABOVE the content rather than a strip painted onto it.
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0xF21A1428), Color(0xFA0B0712)],
-        ),
-        border: Border(top: BorderSide(color: T.hairlineStrong)),
-        boxShadow: [
-          BoxShadow(color: Color(0x8C000000), blurRadius: 16, offset: Offset(0, -4)),
-        ],
-      ),
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewPadding.bottom),
-      height: 66 + MediaQuery.of(context).viewPadding.bottom,
-      child: Row(
-        children: [
-          for (var i = 0; i < items.length; i++)
-            Expanded(
-              child: InkWell(
-                onTap: () => onTap(i),
-                child: _navTile(items[i], i == index),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _navTile(_NavItem item, bool active) {
-    // Animated so switching tabs has a beat to it. Nothing here moved before — the icon simply
-    // swapped colour, which is the flattest possible way to show state.
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOut,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              // Accent bloom behind the active tab — the depth cue that tells you which tab you
-              // are on from the corner of your eye, without adding another line to the bar.
-              AnimatedOpacity(
-                opacity: active ? 1 : 0,
-                duration: const Duration(milliseconds: 240),
-                child: Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: RadialGradient(
-                      colors: [T.accent.withValues(alpha: 0.34), Colors.transparent],
-                    ),
-                  ),
-                ),
-              ),
-              HexBox(
-                size: 24,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: active ? T.accent.withValues(alpha: 0.22) : Colors.transparent,
-                  ),
-                  child: Icon(item.icon,
-                      size: 15, color: active ? T.accent : const Color(0xFF6B6280)),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          AnimatedDefaultTextStyle(
-            duration: const Duration(milliseconds: 220),
-            style: AppTheme.body(9,
-                weight: active ? FontWeight.w700 : FontWeight.w600,
-                color: active ? T.textPrimary : T.textInactive),
-            child: Text(item.label),
-          ),
-          const SizedBox(height: 3),
-          // A short accent underline anchors the active tab to the bar's top edge.
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 240),
-            curve: Curves.easeOut,
-            height: 2,
-            width: active ? 16 : 0,
-            decoration: BoxDecoration(
-              color: T.accent,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
+          FloatingNavItem(
+              icon: Icons.home_outlined, activeIcon: Icons.home_rounded, label: l.pick('หน้าแรก', 'Home')),
+          FloatingNavItem(
+              icon: Icons.search_rounded, activeIcon: Icons.manage_search_rounded, label: l.pick('สำรวจ', 'Explore')),
+          FloatingNavItem(
+              icon: Icons.play_arrow_rounded, activeIcon: Icons.play_arrow_rounded, label: l.pick('ดูสั้น', 'Shorts')),
+          FloatingNavItem(icon: Icons.toll_outlined, activeIcon: Icons.toll_rounded, label: l.pick('เหรียญ', 'Coins')),
+          FloatingNavItem(
+              icon: Icons.person_outline_rounded, activeIcon: Icons.person_rounded, label: l.pick('โปรไฟล์', 'Profile')),
         ],
       ),
     );
