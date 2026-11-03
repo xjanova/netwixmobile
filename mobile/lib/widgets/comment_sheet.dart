@@ -12,21 +12,24 @@ import '../theme/hex.dart';
 import '../theme/tokens.dart';
 import 'login_sheet.dart';
 
-/// Comments for a title (netwix.online-backed, `/api/app/content/{id}/*`).
+/// Comments for a title (netwix.online-backed, `/api/app/content/{id}/*`) —
+/// the same rows the web player's comment drawer shows.
 /// Reads are public; posting requires a signed-in member and echoes
-/// optimistically, then reconciles with the stored comment.
-void showCommentSheet(BuildContext context, int seriesId) {
-  showModalBottomSheet<void>(
+/// optimistically, then reconciles with the stored comment (or rolls back).
+/// [onCount] hears the title's comment total whenever it changes.
+Future<void> showCommentSheet(BuildContext context, int seriesId, {ValueChanged<int>? onCount}) {
+  return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (_) => _CommentSheet(seriesId: seriesId),
+    builder: (_) => _CommentSheet(seriesId: seriesId, onCount: onCount),
   );
 }
 
 class _CommentSheet extends StatefulWidget {
-  const _CommentSheet({required this.seriesId});
+  const _CommentSheet({required this.seriesId, this.onCount});
   final int seriesId;
+  final ValueChanged<int>? onCount;
 
   @override
   State<_CommentSheet> createState() => _CommentSheetState();
@@ -35,8 +38,11 @@ class _CommentSheet extends StatefulWidget {
 class _CommentSheetState extends State<_CommentSheet> {
   final _controller = TextEditingController();
   List<Comment> _comments = [];
+  int _count = 0;
   bool _loading = true;
+  bool _failed = false;
   bool _sending = false;
+  String? _error;
 
   @override
   void initState() {
@@ -51,12 +57,24 @@ class _CommentSheetState extends State<_CommentSheet> {
   }
 
   Future<void> _load() async {
-    final list = await context.read<NetwixApi>().fetchComments(widget.seriesId);
+    setState(() {
+      _loading = true;
+      _failed = false;
+    });
+    final res = await context.read<NetwixApi>().fetchCommentList(widget.seriesId);
     if (!mounted) return;
     setState(() {
-      _comments = list;
       _loading = false;
+      if (res == null) {
+        _failed = true;
+        return;
+      }
+      // Keep any echo still waiting on the server above the fresh list.
+      final pending = _comments.where((c) => c.id.startsWith('local-')).toList();
+      _comments = [...pending, ...res.items];
+      _count = res.count + pending.length;
     });
+    if (res != null) widget.onCount?.call(_count);
   }
 
   Future<void> _send() async {
@@ -71,9 +89,13 @@ class _CommentSheetState extends State<_CommentSheet> {
       if (!mounted || !context.read<MemberState>().isLoggedIn) return;
     }
 
-    setState(() => _sending = true);
+    setState(() {
+      _sending = true;
+      _error = null;
+    });
     final api = context.read<NetwixApi>();
-    final me = context.read<MemberState>().member;
+    final me = member.member;
+    final l = context.read<AppState>().l;
 
     // optimistic echo (stable id so we can swap in the stored comment)
     final optimistic = Comment(
@@ -85,22 +107,33 @@ class _CommentSheetState extends State<_CommentSheet> {
     setState(() {
       _comments = [optimistic, ..._comments];
       _controller.clear();
-      _sending = false;
     });
 
     final saved = await api.postComment(widget.seriesId, text);
     if (!mounted) return;
-    if (saved != null) {
-      // Reconcile: replace the local echo with the server's stored comment.
+    if (saved == null) {
+      // Not stored (offline, rate-limited, signed out): take the echo back and
+      // hand the text back so nothing the member typed is lost.
       setState(() {
-        _comments = [saved, ..._comments.where((x) => x.id != optimistic.id)];
+        _comments = _comments.where((x) => x.id != optimistic.id).toList();
+        if (_controller.text.trim().isEmpty) _controller.text = text;
+        _sending = false;
+        _error = l.pick('ส่งความคิดเห็นไม่สำเร็จ ตรวจสอบอินเทอร์เน็ตแล้วลองใหม่',
+            'Could not post — check your connection and try again');
       });
+      return;
     }
+    // Reconcile: replace the local echo with the server's stored comment.
+    setState(() {
+      _comments = [saved, ..._comments.where((x) => x.id != optimistic.id)];
+      _count++;
+      _sending = false;
+    });
+    widget.onCount?.call(_count);
 
     // Reward the comment (signed-in only, daily-capped server-side + locally).
-    final got = await context.read<MemberState>().awardComment();
+    final got = await member.awardComment();
     if (mounted && got > 0) {
-      final l = context.read<AppState>().l;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('+$got ${l.pick('เหรียญ', 'coins')} 🪙')),
       );
@@ -128,14 +161,24 @@ class _CommentSheetState extends State<_CommentSheet> {
                   Text(l.bi('ความคิดเห็น', 'Comments'),
                       style: AppTheme.display(17, weight: FontWeight.w700)),
                   const Spacer(),
-                  Text('${_comments.length}', style: AppTheme.body(13, color: T.textMuted)),
+                  Text('$_count', style: AppTheme.body(13, color: T.textMuted)),
                 ],
               ),
             ),
             Expanded(
               child: _loading
                   ? const Center(child: CircularProgressIndicator(color: T.accent))
-                  : _comments.isEmpty
+                  : _failed && _comments.isEmpty
+                      ? Center(
+                          child: Column(mainAxisSize: MainAxisSize.min, children: [
+                            Text(l.pick('โหลดความคิดเห็นไม่ได้ ตรวจสอบอินเทอร์เน็ต', 'Could not load comments — check your connection'),
+                                style: AppTheme.body(13, color: T.textMuted)),
+                            TextButton(
+                              onPressed: _load,
+                              child: Text(l.pick('ลองใหม่', 'Retry'), style: AppTheme.body(13, color: T.accent)),
+                            ),
+                          ]))
+                      : _comments.isEmpty
                       ? Center(
                           child: Text(l.pick('ยังไม่มีความคิดเห็น เป็นคนแรกเลย!', 'No comments yet — be first!'),
                               style: AppTheme.body(13, color: T.textMuted)))
@@ -145,6 +188,11 @@ class _CommentSheetState extends State<_CommentSheet> {
                           itemBuilder: (_, i) => _row(_comments[i], l),
                         ),
             ),
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+                child: Text(_error!, style: AppTheme.body(12, color: const Color(0xFFFF6B85))),
+              ),
             _composer(l),
           ],
         ),
@@ -225,8 +273,10 @@ class _CommentSheetState extends State<_CommentSheet> {
                   cursorColor: T.accent,
                   minLines: 1,
                   maxLines: 4,
+                  maxLength: 500,
                   decoration: InputDecoration(
                     border: InputBorder.none,
+                    counterText: '',
                     hintText: l.pick('เขียนความคิดเห็น…', 'Write a comment…'),
                     hintStyle: AppTheme.body(13.5, color: T.textMuted),
                   ),
@@ -240,7 +290,11 @@ class _CommentSheetState extends State<_CommentSheet> {
                 width: 44,
                 height: 44,
                 decoration: const BoxDecoration(gradient: T.accentGradient, shape: BoxShape.circle),
-                child: const Icon(Icons.send_rounded, color: T.onAccent, size: 20),
+                child: _sending
+                    ? const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: CircularProgressIndicator(strokeWidth: 2, color: T.onAccent))
+                    : const Icon(Icons.send_rounded, color: T.onAccent, size: 20),
               ),
             ),
           ],

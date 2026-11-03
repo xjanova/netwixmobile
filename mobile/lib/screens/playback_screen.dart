@@ -21,6 +21,7 @@ import '../services/ad_service.dart';
 import '../widgets/end_card.dart';
 import '../widgets/login_sheet.dart';
 import '../widgets/preroll_ad.dart';
+import '../widgets/social_rail.dart';
 import '../widgets/unlock_sheet.dart';
 import 'go_pro_screen.dart';
 import '../theme/app_theme.dart';
@@ -917,12 +918,16 @@ class _PlaybackScreenState extends State<PlaybackScreen> with WidgetsBindingObse
                       ),
                     ),
 
-                    // right action rail (episodes) — portrait only
+                    // right action rail (like · comment · share, then episodes) — portrait only
                     if (!_fullscreen)
                       Positioned(
                         right: 10,
                         bottom: 130,
-                        child: _railBtn(Icons.grid_view_rounded, l.pick('ตอน', 'Eps'), _openEpisodeSheet),
+                        child: Column(mainAxisSize: MainAxisSize.min, children: [
+                          SocialRail(content: c, gap: 14),
+                          const SizedBox(height: 14),
+                          _railBtn(Icons.grid_view_rounded, l.pick('ตอน', 'Eps'), _openEpisodeSheet),
+                        ]),
                       ),
 
                     // bottom: ad (free users, portrait only) + scrubber
